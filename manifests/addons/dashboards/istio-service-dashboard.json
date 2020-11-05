@@ -958,7 +958,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Incoming Requests by Source And Response Code",
+          "title": "Incoming Requests By Source And Response Code",
           "tooltip": {
             "shared": false,
             "sort": 0,
@@ -1231,7 +1231,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Incoming Request Duration by Source",
+          "title": "Incoming Request Duration By Source",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -1800,7 +1800,7 @@
           }
         }
       ],
-      "title": "Client workloads",
+      "title": "Client Workloads",
       "type": "row"
     },
     {
@@ -1907,7 +1907,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Incoming Requests by Destination And Response Code",
+          "title": "Incoming Requests By Destination And Response Code",
           "tooltip": {
             "shared": false,
             "sort": 0,
@@ -2016,7 +2016,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Incoming Success Rate (non-5xx responses) By Source",
+          "title": "Incoming Success Rate (non-5xx responses) By Destination",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2180,7 +2180,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Incoming Request Duration by Source",
+          "title": "Incoming Request Duration By Destination",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2342,7 +2342,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Incoming Request Size By Source",
+          "title": "Incoming Request Size By Destination",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2504,7 +2504,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Response Size By Source",
+          "title": "Response Size By Destination",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2749,7 +2749,7 @@
           }
         }
       ],
-      "title": "Services workloads",
+      "title": "Services Workloads",
       "type": "row"
     }
   ],

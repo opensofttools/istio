@@ -669,7 +669,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Incoming Requests by Source And Response Code",
+          "title": "Incoming Requests By Source And Response Code",
           "tooltip": {
             "shared": false,
             "sort": 0,
@@ -942,7 +942,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Incoming Request Duration by Source",
+          "title": "Incoming Request Duration By Source",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -1511,7 +1511,7 @@
           }
         }
       ],
-      "title": "Inbound workloads",
+      "title": "Inbound Workloads",
       "type": "row"
     },
     {
@@ -1525,7 +1525,7 @@
       "id": 91,
       "panels": [
         {
-          "content": "<div class=\"dashboard-header text-center\">\n<span>OUTBOUND SERVICES</span>\n</div>",
+          "content": "<div class=\"dashboard-header text-center\">\n<span>OUTBOUND WORKLOADS</span>\n</div>",
           "fieldConfig": {
             "defaults": {
               "custom": {}
@@ -1542,7 +1542,7 @@
           "links": [],
           "mode": "html",
           "options": {
-            "content": "<div class=\"dashboard-header text-center\">\n<span>OUTBOUND SERVICES</span>\n</div>",
+            "content": "<div class=\"dashboard-header text-center\">\n<span>OUTBOUND WORKLOADS</span>\n</div>",
             "mode": "html"
           },
           "pluginVersion": "7.1.0",
@@ -1618,7 +1618,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Outgoing Requests by Destination And Response Code",
+          "title": "Outgoing Requests By Destination And Response Code",
           "tooltip": {
             "shared": false,
             "sort": 0,
@@ -1891,7 +1891,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Outgoing Request Duration by Destination",
+          "title": "Outgoing Request Duration By Destination",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2273,7 +2273,7 @@
             "y": 29
           },
           "hiddenSeries": false,
-          "id": 76,
+          "id": 78,
           "legend": {
             "avg": false,
             "current": false,
@@ -2298,7 +2298,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "round(sum(irate(istio_tcp_sent_bytes_total{connection_security_policy=\"mutual_tls\", reporter=\"source\", source_workload_namespace=~\"$namespace\", source_workload=~\"$workload\", destination_service=~\"$dstsvc\"}[1m])) by (destination_service), 0.001)",
+              "expr": "round(sum(irate(istio_tcp_received_bytes_total{reporter=\"source\", connection_security_policy=\"mutual_tls\", source_workload_namespace=~\"$namespace\", source_workload=~\"$workload\", destination_service=~\"$dstsvc\"}[1m])) by (destination_service), 0.001)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{ destination_service }} (🔐mTLS)",
@@ -2306,7 +2306,7 @@
               "step": 2
             },
             {
-              "expr": "round(sum(irate(istio_tcp_sent_bytes_total{connection_security_policy!=\"mutual_tls\", reporter=\"source\", source_workload_namespace=~\"$namespace\", source_workload=~\"$workload\", destination_service=~\"$dstsvc\"}[1m])) by (destination_service), 0.001)",
+              "expr": "round(sum(irate(istio_tcp_received_bytes_total{reporter=\"source\", connection_security_policy!=\"mutual_tls\", source_workload_namespace=~\"$namespace\", source_workload=~\"$workload\", destination_service=~\"$dstsvc\"}[1m])) by (destination_service), 0.001)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{ destination_service }}",
@@ -2318,7 +2318,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Bytes Sent on Outgoing TCP Connection",
+          "title": "Bytes Received from Outgoing TCP Connection",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -2376,7 +2376,7 @@
             "y": 29
           },
           "hiddenSeries": false,
-          "id": 78,
+          "id": 76,
           "legend": {
             "avg": false,
             "current": false,
@@ -2401,7 +2401,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "round(sum(irate(istio_tcp_received_bytes_total{reporter=\"source\", connection_security_policy=\"mutual_tls\", source_workload_namespace=~\"$namespace\", source_workload=~\"$workload\", destination_service=~\"$dstsvc\"}[1m])) by (destination_service), 0.001)",
+              "expr": "round(sum(irate(istio_tcp_sent_bytes_total{connection_security_policy=\"mutual_tls\", reporter=\"source\", source_workload_namespace=~\"$namespace\", source_workload=~\"$workload\", destination_service=~\"$dstsvc\"}[1m])) by (destination_service), 0.001)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{ destination_service }} (🔐mTLS)",
@@ -2409,7 +2409,7 @@
               "step": 2
             },
             {
-              "expr": "round(sum(irate(istio_tcp_received_bytes_total{reporter=\"source\", connection_security_policy!=\"mutual_tls\", source_workload_namespace=~\"$namespace\", source_workload=~\"$workload\", destination_service=~\"$dstsvc\"}[1m])) by (destination_service), 0.001)",
+              "expr": "round(sum(irate(istio_tcp_sent_bytes_total{connection_security_policy!=\"mutual_tls\", reporter=\"source\", source_workload_namespace=~\"$namespace\", source_workload=~\"$workload\", destination_service=~\"$dstsvc\"}[1m])) by (destination_service), 0.001)",
               "format": "time_series",
               "intervalFactor": 1,
               "legendFormat": "{{ destination_service }}",
@@ -2421,7 +2421,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Bytes Received from Outgoing TCP Connection",
+          "title": "Bytes Sent to Outgoing TCP Connection",
           "tooltip": {
             "shared": true,
             "sort": 0,
