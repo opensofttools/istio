@@ -108,8 +108,8 @@ func loadConfig(injectFile, valuesFile string) (*Config, string, error) {
 }
 
 func unmarshalConfig(data []byte) (*Config, error) {
-	var c Config
-	if err := yaml.Unmarshal(data, &c); err != nil {
+	c, err := UnmarshalConfig(data)
+	if err != nil {
 		return nil, err
 	}
 
@@ -117,7 +117,7 @@ func unmarshalConfig(data []byte) (*Config, error) {
 	log.Debugf("Policy: %v", c.Policy)
 	log.Debugf("AlwaysInjectSelector: %v", c.AlwaysInjectSelector)
 	log.Debugf("NeverInjectSelector: %v", c.NeverInjectSelector)
-	log.Debugf("Template: |\n  %v", strings.Replace(c.Template, "\n", "\n  ", -1))
+	log.Debugf("Templates: |\n  %v", c.Templates, "\n", "\n  ", -1)
 	return &c, nil
 }
 
@@ -335,7 +335,7 @@ type InjectionParameters struct {
 	pod                 *corev1.Pod
 	deployMeta          *metav1.ObjectMeta
 	typeMeta            *metav1.TypeMeta
-	template            string
+	template            Templates
 	meshConfig          *meshconfig.MeshConfig
 	valuesConfig        string
 	revision            string
@@ -383,25 +383,17 @@ func injectPod(req InjectionParameters) ([]byte, error) {
 	}
 
 	// Run the injection template, giving us a partial pod spec
-	spec, injectedPodData, err := RunTemplate(req)
+	mergedPod, injectedPodData, err := RunTemplate(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to run injection template: %v", err)
 	}
 
-	// Merge the original pod spec with the injected overlay
-	mergedPodSpec, err := mergeInjectedConfig(req, spec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to merge pod spec: %v", err)
-	}
-	pod := req.pod.DeepCopy()
-	pod.Spec = mergedPodSpec
-
 	// Apply some additional transformations to the pod
-	if err := postProcessPod(pod, *injectedPodData, req); err != nil {
+	if err := postProcessPod(mergedPod, *injectedPodData, req); err != nil {
 		return nil, fmt.Errorf("failed to process pod: %v", err)
 	}
 
-	patch, err := createPatch(pod, originalPodSpec)
+	patch, err := createPatch(mergedPod, originalPodSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create patch: %v", err)
 	}
@@ -591,28 +583,56 @@ func applyPrometheusMerge(pod *corev1.Pod, mesh *meshconfig.MeshConfig) error {
 	return nil
 }
 
-func mergeInjectedConfig(req InjectionParameters, injected []byte) (corev1.PodSpec, error) {
-	current, err := json.Marshal(req.pod.Spec)
+func mergeInjectedConfigLegacy(req *corev1.Pod, injected []byte) (*corev1.Pod, error) {
+	current, err := json.Marshal(req.Spec)
 	if err != nil {
-		return corev1.PodSpec{}, err
+		return nil, err
 	}
 
 	// The template is yaml, StrategicMergePatch expects JSON
 	injectedJSON, err := yaml.YAMLToJSON(injected)
 	if err != nil {
-		return corev1.PodSpec{}, fmt.Errorf("yaml to json: %v", err)
+		return nil, fmt.Errorf("yaml to json: %v", err)
 	}
 
-	pod := corev1.PodSpec{}
-	// Overlay the injected template onto the original pod spec
+	podSpec := corev1.PodSpec{}
+	// Overlay the injected template onto the original podSpec
+	patched, err := strategicpatch.StrategicMergePatch(current, injectedJSON, podSpec)
+	if err != nil {
+		return nil, fmt.Errorf("strategic merge: %v", err)
+	}
+	if err := json.Unmarshal(patched, &podSpec); err != nil {
+		return nil, fmt.Errorf("unmarshal patched pod: %v", err)
+	}
+	pod := req.DeepCopy()
+	pod.Spec = podSpec
+
+	return pod, nil
+}
+
+func mergeInjectedConfig(req *corev1.Pod, injected []byte) (*corev1.Pod, error) {
+	current, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	// The template is yaml, StrategicMergePatch expects JSON
+	injectedJSON, err := yaml.YAMLToJSON(injected)
+	if err != nil {
+		return nil, fmt.Errorf("yaml to json: %v", err)
+	}
+
+	pod := corev1.Pod{}
+	// Overlay the injected template onto the original podSpec
 	patched, err := strategicpatch.StrategicMergePatch(current, injectedJSON, pod)
 	if err != nil {
-		return corev1.PodSpec{}, fmt.Errorf("strategic merge: %v", err)
+		return nil, fmt.Errorf("strategic merge: %v", err)
 	}
 	if err := json.Unmarshal(patched, &pod); err != nil {
-		return corev1.PodSpec{}, fmt.Errorf("unmarshal patched pod: %v", err)
+		return nil, fmt.Errorf("unmarshal patched pod: %v", err)
 	}
-	return pod, nil
+
+	return &pod, nil
 }
 
 func (wh *Webhook) inject(ar *kube.AdmissionReview, path string) *kube.AdmissionResponse {
@@ -648,7 +668,7 @@ func (wh *Webhook) inject(ar *kube.AdmissionReview, path string) *kube.Admission
 		pod:                 &pod,
 		deployMeta:          deploy,
 		typeMeta:            typeMeta,
-		template:            wh.Config.Template,
+		template:            wh.Config.Templates,
 		meshConfig:          wh.meshConfig,
 		valuesConfig:        wh.valuesConfig,
 		revision:            wh.revision,
