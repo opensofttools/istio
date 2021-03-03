@@ -22,9 +22,7 @@ import (
 	"istio.io/istio/pkg/test/framework/label"
 )
 
-var (
-	settingsFromCommandLine = DefaultSettings()
-)
+var settingsFromCommandLine = DefaultSettings()
 
 // SettingsFromCommandLine returns settings obtained from command-line flags. flag.Parse must be called before
 // calling this function.
@@ -41,6 +39,11 @@ func SettingsFromCommandLine(testID string) (*Settings, error) {
 		return nil, err
 	}
 	s.Selector = f
+
+	s.SkipMatcher, err = NewMatcher(s.SkipString)
+	if err != nil {
+		return nil, err
+	}
 
 	if s.FailOnDeprecation && s.NoCleanup {
 		return nil,
@@ -68,6 +71,9 @@ func init() {
 	flag.StringVar(&settingsFromCommandLine.SelectorString, "istio.test.select", settingsFromCommandLine.SelectorString,
 		"Comma separated list of labels for selecting tests to run (e.g. 'foo,+bar-baz').")
 
+	flag.Var(&settingsFromCommandLine.SkipString, "istio.test.skip",
+		"Skip tests matching the regular expression. This follows the semantics of -test.run.")
+
 	flag.IntVar(&settingsFromCommandLine.Retries, "istio.test.retries", settingsFromCommandLine.Retries,
 		"Number of times to retry tests")
 
@@ -82,4 +88,15 @@ func init() {
 
 	flag.BoolVar(&settingsFromCommandLine.SkipVM, "istio.test.skipVM", settingsFromCommandLine.SkipVM,
 		"Skip VM related parts in all tests.")
+}
+
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return fmt.Sprint([]string(*i))
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
 }

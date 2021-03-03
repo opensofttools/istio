@@ -66,17 +66,15 @@ const (
 	TestServiceNHostname = "foo.bar"
 )
 
-var (
-	testMesh = meshconfig.MeshConfig{
-		ConnectTimeout: &types.Duration{
-			Seconds: 10,
-			Nanos:   1,
-		},
-		EnableAutoMtls: &types.BoolValue{
-			Value: false,
-		},
-	}
-)
+var testMesh = meshconfig.MeshConfig{
+	ConnectTimeout: &types.Duration{
+		Seconds: 10,
+		Nanos:   1,
+	},
+	EnableAutoMtls: &types.BoolValue{
+		Value: false,
+	},
+}
 
 func TestHTTPCircuitBreakerThresholds(t *testing.T) {
 	checkClusters := []string{"outbound|8080||*.example.org", "inbound|10001||"}
@@ -89,7 +87,8 @@ func TestHTTPCircuitBreakerThresholds(t *testing.T) {
 				MaxRequestsPerConnection: 3,
 				MaxRetries:               4,
 			},
-		}}
+		},
+	}
 
 	for _, s := range settings {
 		testName := "default"
@@ -108,7 +107,8 @@ func TestHTTPCircuitBreakerThresholds(t *testing.T) {
 					TrafficPolicy: &networking.TrafficPolicy{
 						ConnectionPool: s,
 					},
-				}}))
+				},
+			}))
 
 			for _, c := range checkClusters {
 				cluster := clusters[c]
@@ -151,13 +151,15 @@ func TestCommonHttpProtocolOptions(t *testing.T) {
 			sniffingEnabledForInbound: false,
 			proxyType:                 model.SidecarProxy,
 			clusters:                  8,
-		}, {
+		},
+		{
 			clusterName:               "inbound|10001||",
 			useDownStreamProtocol:     false,
 			sniffingEnabledForInbound: false,
 			proxyType:                 model.SidecarProxy,
 			clusters:                  8,
-		}, {
+		},
+		{
 			clusterName:               "outbound|9090||*.example.org",
 			useDownStreamProtocol:     true,
 			sniffingEnabledForInbound: false,
@@ -204,13 +206,15 @@ func TestCommonHttpProtocolOptions(t *testing.T) {
 		// nolint: staticcheck
 		t.Run(testName, func(t *testing.T) {
 			g := NewWithT(t)
-			clusters := xdstest.ExtractClusters(buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", nodeType: tc.proxyType, mesh: testMesh,
+			clusters := xdstest.ExtractClusters(buildTestClusters(clusterTest{
+				t: t, serviceHostname: "*.example.org", nodeType: tc.proxyType, mesh: testMesh,
 				destRule: &networking.DestinationRule{
 					Host: "*.example.org",
 					TrafficPolicy: &networking.TrafficPolicy{
 						ConnectionPool: settings,
 					},
-				}}))
+				},
+			}))
 			g.Expect(len(clusters)).To(Equal(tc.clusters))
 			c := clusters[tc.clusterName]
 
@@ -437,7 +441,8 @@ func TestBuildGatewayClustersWithRingHashLb(t *testing.T) {
 			defer func() { features.FilterGatewayClusterConfig = gwClusters }()
 
 			c := xdstest.ExtractCluster("outbound|8080||*.example.org",
-				buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", nodeType: model.Router, mesh: testMesh,
+				buildTestClusters(clusterTest{
+					t: t, serviceHostname: "*.example.org", nodeType: model.Router, mesh: testMesh,
 					destRule: &networking.DestinationRule{
 						Host: "*.example.org",
 						TrafficPolicy: &networking.TrafficPolicy{
@@ -455,7 +460,8 @@ func TestBuildGatewayClustersWithRingHashLb(t *testing.T) {
 								},
 							},
 						},
-					}}))
+					},
+				}))
 
 			g.Expect(c.LbPolicy).To(Equal(cluster.Cluster_RING_HASH))
 			g.Expect(c.GetRingHashLbConfig().GetMinimumRingSize().GetValue()).To(Equal(uint64(tt.expectedRingSize)))
@@ -576,7 +582,8 @@ func buildSniDnatTestClustersForGateway(t *testing.T, sniValue string) []*cluste
 }
 
 func buildSniTestClustersWithMetadata(t testing.TB, sniValue string, typ model.NodeType, meta *model.NodeMetadata) []*cluster.Cluster {
-	return buildTestClusters(clusterTest{t: t, serviceHostname: "foo.example.org", nodeType: typ, mesh: testMesh,
+	return buildTestClusters(clusterTest{
+		t: t, serviceHostname: "foo.example.org", nodeType: typ, mesh: testMesh,
 		destRule: &networking.DestinationRule{
 			Host: "*.example.org",
 			Subsets: []*networking.Subset{
@@ -673,7 +680,8 @@ func buildTestClustersWithTCPKeepalive(t testing.TB, configType ConfigType) []*c
 		destinationRuleTCPKeepalive = &networking.ConnectionPoolSettings_TCPSettings_TcpKeepalive{}
 	}
 
-	return buildTestClusters(clusterTest{t: t, serviceHostname: "foo.example.org", nodeType: model.SidecarProxy, mesh: m,
+	return buildTestClusters(clusterTest{
+		t: t, serviceHostname: "foo.example.org", nodeType: model.SidecarProxy, mesh: m,
 		destRule: &networking.DestinationRule{
 			Host: "*.example.org",
 			Subsets: []*networking.Subset{
@@ -696,7 +704,8 @@ func buildTestClustersWithTCPKeepalive(t testing.TB, configType ConfigType) []*c
 					},
 				},
 			},
-		}})
+		},
+	})
 }
 
 func TestClusterMetadata(t *testing.T) {
@@ -944,14 +953,16 @@ func TestDisablePanicThresholdAsDefault(t *testing.T) {
 
 	for _, outlier := range outliers {
 		c := xdstest.ExtractCluster("outbound|8080||*.example.org",
-			buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
+			buildTestClusters(clusterTest{
+				t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
 				locality: &core.Locality{}, mesh: testMesh,
 				destRule: &networking.DestinationRule{
 					Host: "*.example.org",
 					TrafficPolicy: &networking.TrafficPolicy{
 						OutlierDetection: outlier,
 					},
-				}}))
+				},
+			}))
 		g.Expect(c.CommonLbConfig.HealthyPanicThreshold).To(Not(BeNil()))
 		g.Expect(c.CommonLbConfig.HealthyPanicThreshold.GetValue()).To(Equal(float64(0)))
 	}
@@ -1040,14 +1051,16 @@ func TestApplyOutlierDetection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := xdstest.ExtractCluster("outbound|8080||*.example.org",
-				buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
+				buildTestClusters(clusterTest{
+					t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
 					locality: &core.Locality{}, mesh: testMesh,
 					destRule: &networking.DestinationRule{
 						Host: "*.example.org",
 						TrafficPolicy: &networking.TrafficPolicy{
 							OutlierDetection: tt.cfg,
 						},
-					}}))
+					},
+				}))
 			g.Expect(c.OutlierDetection).To(Equal(tt.o))
 		})
 	}
@@ -1068,21 +1081,25 @@ func TestStatNamePattern(t *testing.T) {
 		OutboundClusterStatName: "%SERVICE%_%SERVICE_PORT_NAME%_%SERVICE_PORT%",
 	}
 
-	clusters := buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
+	clusters := buildTestClusters(clusterTest{
+		t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
 		locality: &core.Locality{}, mesh: statConfigMesh,
 		destRule: &networking.DestinationRule{
 			Host: "*.example.org",
-		}})
+		},
+	})
 	g.Expect(xdstest.ExtractCluster("outbound|8080||*.example.org", clusters).AltStatName).To(Equal("*.example.org_default_8080"))
 	g.Expect(xdstest.ExtractCluster("inbound|10001||", clusters).AltStatName).To(Equal("LocalService_*.example.org"))
 }
 
 func TestDuplicateClusters(t *testing.T) {
-	buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
+	buildTestClusters(clusterTest{
+		t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
 		locality: &core.Locality{}, mesh: testMesh,
 		destRule: &networking.DestinationRule{
 			Host: "*.example.org",
-		}})
+		},
+	})
 }
 
 func TestSidecarLocalityLB(t *testing.T) {
@@ -1101,7 +1118,8 @@ func TestSidecarLocalityLB(t *testing.T) {
 	}
 
 	c := xdstest.ExtractCluster("outbound|8080||*.example.org",
-		buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
+		buildTestClusters(clusterTest{
+			t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
 			locality: &core.Locality{
 				Region:  "region1",
 				Zone:    "zone1",
@@ -1114,7 +1132,8 @@ func TestSidecarLocalityLB(t *testing.T) {
 						MinHealthPercent: 10,
 					},
 				},
-			}}))
+			},
+		}))
 
 	if c.CommonLbConfig == nil {
 		t.Fatalf("CommonLbConfig should be set for cluster %+v", c)
@@ -1142,7 +1161,8 @@ func TestSidecarLocalityLB(t *testing.T) {
 	testMesh.LocalityLbSetting = &networking.LocalityLoadBalancerSetting{}
 
 	c = xdstest.ExtractCluster("outbound|8080||*.example.org",
-		buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
+		buildTestClusters(clusterTest{
+			t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
 			locality: &core.Locality{
 				Region:  "region1",
 				Zone:    "zone1",
@@ -1155,7 +1175,8 @@ func TestSidecarLocalityLB(t *testing.T) {
 						MinHealthPercent: 10,
 					},
 				},
-			}}))
+			},
+		}))
 	if c.CommonLbConfig == nil {
 		t.Fatalf("CommonLbConfig should be set for cluster %+v", c)
 	}
@@ -1190,7 +1211,8 @@ func TestLocalityLBDestinationRuleOverride(t *testing.T) {
 	}
 
 	c := xdstest.ExtractCluster("outbound|8080||*.example.org",
-		buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
+		buildTestClusters(clusterTest{
+			t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.SidecarProxy,
 			locality: &core.Locality{
 				Region:  "region1",
 				Zone:    "zone1",
@@ -1214,7 +1236,8 @@ func TestLocalityLBDestinationRuleOverride(t *testing.T) {
 						},
 					}},
 				},
-			}}))
+			},
+		}))
 
 	if c.CommonLbConfig == nil {
 		t.Fatalf("CommonLbConfig should be set for cluster %+v", c)
@@ -1258,7 +1281,8 @@ func TestGatewayLocalityLB(t *testing.T) {
 	defer func() { features.FilterGatewayClusterConfig = gwClusters }()
 
 	c := xdstest.ExtractCluster("outbound|8080||*.example.org",
-		buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.Router,
+		buildTestClusters(clusterTest{
+			t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.Router,
 			locality: &core.Locality{
 				Region:  "region1",
 				Zone:    "zone1",
@@ -1272,7 +1296,8 @@ func TestGatewayLocalityLB(t *testing.T) {
 					},
 				},
 			},
-			meta: &model.NodeMetadata{RouterMode: string(model.SniDnatRouter)}}))
+			meta: &model.NodeMetadata{RouterMode: string(model.SniDnatRouter)},
+		}))
 
 	if c.CommonLbConfig == nil {
 		t.Errorf("CommonLbConfig should be set for cluster %+v", c)
@@ -1298,7 +1323,8 @@ func TestGatewayLocalityLB(t *testing.T) {
 	testMesh.LocalityLbSetting = &networking.LocalityLoadBalancerSetting{}
 
 	c = xdstest.ExtractCluster("outbound|8080||*.example.org",
-		buildTestClusters(clusterTest{t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.Router,
+		buildTestClusters(clusterTest{
+			t: t, serviceHostname: "*.example.org", serviceResolution: model.DNSLB, nodeType: model.Router,
 			locality: &core.Locality{
 				Region:  "region1",
 				Zone:    "zone1",
@@ -1312,7 +1338,8 @@ func TestGatewayLocalityLB(t *testing.T) {
 					},
 				},
 			}, // peerAuthn
-			meta: &model.NodeMetadata{RouterMode: string(model.SniDnatRouter)}}))
+			meta: &model.NodeMetadata{RouterMode: string(model.SniDnatRouter)},
+		}))
 
 	if c.CommonLbConfig == nil {
 		t.Fatalf("CommonLbConfig should be set for cluster %+v", c)
@@ -1402,7 +1429,8 @@ func TestClusterDiscoveryTypeAndLbPolicyRoundRobin(t *testing.T) {
 					},
 				},
 			},
-		}})
+		},
+	})
 
 	c := xdstest.ExtractCluster("outbound|8080||*.example.org",
 		clusters)
@@ -1428,7 +1456,8 @@ func TestClusterDiscoveryTypeAndLbPolicyPassthrough(t *testing.T) {
 					},
 				},
 			},
-		}})
+		},
+	})
 
 	c := xdstest.ExtractCluster("outbound|8080||*.example.org", clusters)
 	g.Expect(c.LbPolicy).To(Equal(cluster.Cluster_CLUSTER_PROVIDED))
@@ -1696,7 +1725,6 @@ func TestAutoMTLSClusterSubsets(t *testing.T) {
 		g.Expect(getTLSContext(t, clusters[i])).To(BeNil())
 		g.Expect(clusters[i].TransportSocketMatches).To(HaveLen(2))
 	}
-
 }
 
 func TestAutoMTLSClusterIgnoreWorkloadLevelPeerAuthn(t *testing.T) {
@@ -1743,7 +1771,8 @@ func TestAutoMTLSClusterIgnoreWorkloadLevelPeerAuthn(t *testing.T) {
 		nodeType:        model.SidecarProxy,
 		mesh:            testMesh,
 		destRule:        destRule,
-		peerAuthn:       peerAuthn})
+		peerAuthn:       peerAuthn,
+	})
 
 	// No policy visible, auto-mTLS should set to PERMISSIVE.
 	// For port 8080, (m)TLS settings is automatically added, thus its cluster should have TLS context.
@@ -1771,12 +1800,12 @@ func TestApplyLoadBalancer(t *testing.T) {
 		expectedLocalityWeightedConfig bool
 	}{
 		{
-			name:             "lb = nil ORIGINAL_DST discovery type",
+			name:             "ORIGINAL_DST discovery type is a no op",
 			discoveryType:    cluster.Cluster_ORIGINAL_DST,
 			expectedLbPolicy: cluster.Cluster_CLUSTER_PROVIDED,
 		},
 		{
-			name:             "lb = nil redis protocol",
+			name:             "redis protocol",
 			discoveryType:    cluster.Cluster_EDS,
 			port:             &model.Port{Protocol: protocol.Redis},
 			expectedLbPolicy: cluster.Cluster_MAGLEV,
@@ -1813,8 +1842,12 @@ func TestApplyLoadBalancer(t *testing.T) {
 
 	for _, test := range testcases {
 		t.Run(test.name, func(t *testing.T) {
-			cluster := &cluster.Cluster{
+			c := &cluster.Cluster{
 				ClusterDiscoveryType: &cluster.Cluster_Type{Type: test.discoveryType},
+			}
+
+			if test.discoveryType == cluster.Cluster_ORIGINAL_DST {
+				c.LbPolicy = cluster.Cluster_CLUSTER_PROVIDED
 			}
 
 			if test.port != nil && test.port.Protocol == protocol.Redis {
@@ -1823,18 +1856,17 @@ func TestApplyLoadBalancer(t *testing.T) {
 				defer func() { features.EnableRedisFilter = defaultValue }()
 			}
 
-			applyLoadBalancer(cluster, test.lbSettings, test.port, &proxy, &meshconfig.MeshConfig{})
+			applyLoadBalancer(c, test.lbSettings, test.port, &proxy, &meshconfig.MeshConfig{})
 
-			if cluster.LbPolicy != test.expectedLbPolicy {
-				t.Errorf("cluster LbPolicy %s != expected %s", cluster.LbPolicy, test.expectedLbPolicy)
+			if c.LbPolicy != test.expectedLbPolicy {
+				t.Errorf("cluster LbPolicy %s != expected %s", c.LbPolicy, test.expectedLbPolicy)
 			}
 
-			if test.expectedLocalityWeightedConfig && cluster.CommonLbConfig.GetLocalityWeightedLbConfig() == nil {
+			if test.expectedLocalityWeightedConfig && c.CommonLbConfig.GetLocalityWeightedLbConfig() == nil {
 				t.Errorf("cluster expected to have weighed config, but is nil")
 			}
 		})
 	}
-
 }
 
 func TestApplyUpstreamTLSSettings(t *testing.T) {
@@ -2183,7 +2215,6 @@ func TestApplyUpstreamTLSSettings(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 type expectedResult struct {
@@ -2193,7 +2224,6 @@ type expectedResult struct {
 
 // TestBuildUpstreamClusterTLSContext tests the buildUpstreamClusterTLSContext function
 func TestBuildUpstreamClusterTLSContext(t *testing.T) {
-
 	metadataClientCert := "/path/to/metadata/cert"
 	metadataRootCert := "/path/to/metadata/root-cert"
 	metadataClientKey := "/path/to/metadata/key"
@@ -2249,8 +2279,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 								SdsConfig: &core.ConfigSource{
 									ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 										ApiConfigSource: &core.ApiConfigSource{
-											ApiType:             core.ApiConfigSource_GRPC,
-											TransportApiVersion: core.ApiVersion_V3,
+											ApiType:                   core.ApiConfigSource_GRPC,
+											SetNodeOnFirstMessageOnly: true,
+											TransportApiVersion:       core.ApiVersion_V3,
 											GrpcServices: []*core.GrpcService{
 												{
 													TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2272,8 +2303,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 									SdsConfig: &core.ConfigSource{
 										ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 											ApiConfigSource: &core.ApiConfigSource{
-												ApiType:             core.ApiConfigSource_GRPC,
-												TransportApiVersion: core.ApiVersion_V3,
+												ApiType:                   core.ApiConfigSource_GRPC,
+												SetNodeOnFirstMessageOnly: true,
+												TransportApiVersion:       core.ApiVersion_V3,
 												GrpcServices: []*core.GrpcService{
 													{
 														TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2322,8 +2354,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 								SdsConfig: &core.ConfigSource{
 									ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 										ApiConfigSource: &core.ApiConfigSource{
-											ApiType:             core.ApiConfigSource_GRPC,
-											TransportApiVersion: core.ApiVersion_V3,
+											ApiType:                   core.ApiConfigSource_GRPC,
+											SetNodeOnFirstMessageOnly: true,
+											TransportApiVersion:       core.ApiVersion_V3,
 											GrpcServices: []*core.GrpcService{
 												{
 													TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2345,8 +2378,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 									SdsConfig: &core.ConfigSource{
 										ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 											ApiConfigSource: &core.ApiConfigSource{
-												ApiType:             core.ApiConfigSource_GRPC,
-												TransportApiVersion: core.ApiVersion_V3,
+												ApiType:                   core.ApiConfigSource_GRPC,
+												SetNodeOnFirstMessageOnly: true,
+												TransportApiVersion:       core.ApiVersion_V3,
 												GrpcServices: []*core.GrpcService{
 													{
 														TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2420,8 +2454,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 									SdsConfig: &core.ConfigSource{
 										ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 											ApiConfigSource: &core.ApiConfigSource{
-												ApiType:             core.ApiConfigSource_GRPC,
-												TransportApiVersion: core.ApiVersion_V3,
+												ApiType:                   core.ApiConfigSource_GRPC,
+												SetNodeOnFirstMessageOnly: true,
+												TransportApiVersion:       core.ApiVersion_V3,
 												GrpcServices: []*core.GrpcService{
 													{
 														TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2431,8 +2466,7 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 												},
 											},
 										},
-										ResourceApiVersion:  core.ApiVersion_V3,
-										InitialFetchTimeout: features.InitialFetchTimeout,
+										ResourceApiVersion: core.ApiVersion_V3,
 									},
 								},
 							},
@@ -2471,8 +2505,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 									SdsConfig: &core.ConfigSource{
 										ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 											ApiConfigSource: &core.ApiConfigSource{
-												ApiType:             core.ApiConfigSource_GRPC,
-												TransportApiVersion: core.ApiVersion_V3,
+												ApiType:                   core.ApiConfigSource_GRPC,
+												SetNodeOnFirstMessageOnly: true,
+												TransportApiVersion:       core.ApiVersion_V3,
 												GrpcServices: []*core.GrpcService{
 													{
 														TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2482,8 +2517,7 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 												},
 											},
 										},
-										ResourceApiVersion:  core.ApiVersion_V3,
-										InitialFetchTimeout: features.InitialFetchTimeout,
+										ResourceApiVersion: core.ApiVersion_V3,
 									},
 								},
 							},
@@ -2524,8 +2558,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 									SdsConfig: &core.ConfigSource{
 										ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 											ApiConfigSource: &core.ApiConfigSource{
-												ApiType:             core.ApiConfigSource_GRPC,
-												TransportApiVersion: core.ApiVersion_V3,
+												ApiType:                   core.ApiConfigSource_GRPC,
+												SetNodeOnFirstMessageOnly: true,
+												TransportApiVersion:       core.ApiVersion_V3,
 												GrpcServices: []*core.GrpcService{
 													{
 														TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2535,8 +2570,7 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 												},
 											},
 										},
-										ResourceApiVersion:  core.ApiVersion_V3,
-										InitialFetchTimeout: features.InitialFetchTimeout,
+										ResourceApiVersion: core.ApiVersion_V3,
 									},
 								},
 							},
@@ -2607,8 +2641,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 								SdsConfig: &core.ConfigSource{
 									ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 										ApiConfigSource: &core.ApiConfigSource{
-											ApiType:             core.ApiConfigSource_GRPC,
-											TransportApiVersion: core.ApiVersion_V3,
+											ApiType:                   core.ApiConfigSource_GRPC,
+											SetNodeOnFirstMessageOnly: true,
+											TransportApiVersion:       core.ApiVersion_V3,
 											GrpcServices: []*core.GrpcService{
 												{
 													TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2618,8 +2653,7 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 											},
 										},
 									},
-									ResourceApiVersion:  core.ApiVersion_V3,
-									InitialFetchTimeout: features.InitialFetchTimeout,
+									ResourceApiVersion: core.ApiVersion_V3,
 								},
 							},
 						},
@@ -2657,8 +2691,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 								SdsConfig: &core.ConfigSource{
 									ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 										ApiConfigSource: &core.ApiConfigSource{
-											ApiType:             core.ApiConfigSource_GRPC,
-											TransportApiVersion: core.ApiVersion_V3,
+											ApiType:                   core.ApiConfigSource_GRPC,
+											SetNodeOnFirstMessageOnly: true,
+											TransportApiVersion:       core.ApiVersion_V3,
 											GrpcServices: []*core.GrpcService{
 												{
 													TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2668,8 +2703,7 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 											},
 										},
 									},
-									ResourceApiVersion:  core.ApiVersion_V3,
-									InitialFetchTimeout: features.InitialFetchTimeout,
+									ResourceApiVersion: core.ApiVersion_V3,
 								},
 							},
 						},
@@ -2681,8 +2715,9 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 									SdsConfig: &core.ConfigSource{
 										ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
 											ApiConfigSource: &core.ApiConfigSource{
-												ApiType:             core.ApiConfigSource_GRPC,
-												TransportApiVersion: core.ApiVersion_V3,
+												ApiType:                   core.ApiConfigSource_GRPC,
+												SetNodeOnFirstMessageOnly: true,
+												TransportApiVersion:       core.ApiVersion_V3,
 												GrpcServices: []*core.GrpcService{
 													{
 														TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
@@ -2692,8 +2727,7 @@ func TestBuildUpstreamClusterTLSContext(t *testing.T) {
 												},
 											},
 										},
-										ResourceApiVersion:  core.ApiVersion_V3,
-										InitialFetchTimeout: features.InitialFetchTimeout,
+										ResourceApiVersion: core.ApiVersion_V3,
 									},
 								},
 							},
@@ -2960,7 +2994,6 @@ func getTLSContext(t *testing.T, c *cluster.Cluster) *tls.UpstreamTlsContext {
 	}
 	tlsContext := &tls.UpstreamTlsContext{}
 	err := ptypes.UnmarshalAny(c.TransportSocket.GetTypedConfig(), tlsContext)
-
 	if err != nil {
 		t.Fatalf("Failed to unmarshall tls context: %v", err)
 	}
@@ -3016,7 +3049,9 @@ func TestShouldH2Upgrade(t *testing.T) {
 			mesh:        meshconfig.MeshConfig{H2UpgradePolicy: meshconfig.MeshConfig_UPGRADE},
 			connectionPool: networking.ConnectionPoolSettings{
 				Http: &networking.ConnectionPoolSettings_HTTPSettings{
-					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DEFAULT}},
+					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DEFAULT,
+				},
+			},
 			upgrade: true,
 		},
 		{
@@ -3027,7 +3062,9 @@ func TestShouldH2Upgrade(t *testing.T) {
 			mesh:        meshconfig.MeshConfig{},
 			connectionPool: networking.ConnectionPoolSettings{
 				Http: &networking.ConnectionPoolSettings_HTTPSettings{
-					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_UPGRADE}},
+					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_UPGRADE,
+				},
+			},
 			upgrade: true,
 		},
 		{
@@ -3038,7 +3075,9 @@ func TestShouldH2Upgrade(t *testing.T) {
 			mesh:        meshconfig.MeshConfig{H2UpgradePolicy: meshconfig.MeshConfig_DO_NOT_UPGRADE},
 			connectionPool: networking.ConnectionPoolSettings{
 				Http: &networking.ConnectionPoolSettings_HTTPSettings{
-					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DEFAULT}},
+					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DEFAULT,
+				},
+			},
 			upgrade: false,
 		},
 		{
@@ -3049,7 +3088,9 @@ func TestShouldH2Upgrade(t *testing.T) {
 			mesh:        meshconfig.MeshConfig{H2UpgradePolicy: meshconfig.MeshConfig_DO_NOT_UPGRADE},
 			connectionPool: networking.ConnectionPoolSettings{
 				Http: &networking.ConnectionPoolSettings_HTTPSettings{
-					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_UPGRADE}},
+					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_UPGRADE,
+				},
+			},
 			upgrade: true,
 		},
 		{
@@ -3060,7 +3101,9 @@ func TestShouldH2Upgrade(t *testing.T) {
 			mesh:        meshconfig.MeshConfig{H2UpgradePolicy: meshconfig.MeshConfig_UPGRADE},
 			connectionPool: networking.ConnectionPoolSettings{
 				Http: &networking.ConnectionPoolSettings_HTTPSettings{
-					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DO_NOT_UPGRADE}},
+					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DO_NOT_UPGRADE,
+				},
+			},
 			upgrade: false,
 		},
 		{
@@ -3071,7 +3114,9 @@ func TestShouldH2Upgrade(t *testing.T) {
 			mesh:        meshconfig.MeshConfig{H2UpgradePolicy: meshconfig.MeshConfig_UPGRADE},
 			connectionPool: networking.ConnectionPoolSettings{
 				Http: &networking.ConnectionPoolSettings_HTTPSettings{
-					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DEFAULT}},
+					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DEFAULT,
+				},
+			},
 			upgrade: false,
 		},
 		{
@@ -3082,7 +3127,9 @@ func TestShouldH2Upgrade(t *testing.T) {
 			mesh:        meshconfig.MeshConfig{H2UpgradePolicy: meshconfig.MeshConfig_UPGRADE},
 			connectionPool: networking.ConnectionPoolSettings{
 				Http: &networking.ConnectionPoolSettings_HTTPSettings{
-					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DEFAULT}},
+					H2UpgradePolicy: networking.ConnectionPoolSettings_HTTPSettings_DEFAULT,
+				},
+			},
 			upgrade: false,
 		},
 	}
@@ -3096,7 +3143,6 @@ func TestShouldH2Upgrade(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestEnvoyFilterPatching(t *testing.T) {

@@ -367,11 +367,11 @@ func (eds *EdsGenerator) Generate(proxy *model.Proxy, push *model.PushContext, w
 		}
 	}
 	if len(edsUpdatedServices) == 0 {
-		adsLog.Infof("EDS: PUSH for node:%s resources:%d size:%s empty:%v cached:%v/%v",
-			proxy.ID, len(resources), util.ByteCount(ResourceSize(resources)), empty, cached, cached+regenerated)
+		adsLog.Infof("EDS: PUSH%s for node:%s resources:%d size:%s empty:%v cached:%v/%v",
+			req.PushReason(), proxy.ID, len(resources), util.ByteCount(ResourceSize(resources)), empty, cached, cached+regenerated)
 	} else if adsLog.DebugEnabled() {
-		adsLog.Debugf("EDS: PUSH INC for node:%s clusters:%d size:%s empty:%vcached:%v/%v",
-			proxy.ID, len(resources), util.ByteCount(ResourceSize(resources)), empty, cached, cached+regenerated)
+		adsLog.Debugf("EDS: PUSH INC%s for node:%s clusters:%d size:%s empty:%v cached:%v/%v",
+			req.PushReason(), proxy.ID, len(resources), util.ByteCount(ResourceSize(resources)), empty, cached, cached+regenerated)
 	}
 	return resources, nil
 }
@@ -383,7 +383,7 @@ func getOutlierDetectionAndLoadBalancerSettings(
 	if destinationRule == nil {
 		return false, nil
 	}
-	var outlierDetectionEnabled = false
+	outlierDetectionEnabled := false
 	var lbSettings *networkingapi.LoadBalancerSettings
 
 	port := &model.Port{Port: portNumber}

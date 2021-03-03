@@ -31,7 +31,6 @@ import (
 
 	meshconfig "istio.io/api/mesh/v1alpha1"
 	networking "istio.io/api/networking/v1alpha3"
-	"istio.io/istio/pilot/pkg/features"
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/networking/util"
 	"istio.io/istio/pilot/test/xdstest"
@@ -581,7 +580,6 @@ func TestMergeTrafficPolicy(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestApplyEdsConfig(t *testing.T) {
@@ -604,8 +602,7 @@ func TestApplyEdsConfig(t *testing.T) {
 					ConfigSourceSpecifier: &core.ConfigSource_Ads{
 						Ads: &core.AggregatedConfigSource{},
 					},
-					InitialFetchTimeout: features.InitialFetchTimeout,
-					ResourceApiVersion:  core.ApiVersion_V3,
+					ResourceApiVersion: core.ApiVersion_V3,
 				},
 			},
 		},
@@ -679,7 +676,8 @@ func TestBuildDefaultCluster(t *testing.T) {
 										NumberValue: float64(8080),
 									},
 								},
-							}},
+							},
+						},
 					},
 				},
 			},
@@ -785,10 +783,12 @@ func TestBuildDefaultCluster(t *testing.T) {
 			cg := NewConfigGenTest(t, TestOptions{MeshConfig: &testMesh})
 			cb := NewClusterBuilder(cg.SetupProxy(nil), cg.PushContext())
 
-			defaultCluster := cb.buildDefaultCluster(tt.clusterName, tt.discovery, tt.endpoints, tt.direction, servicePort, &model.Service{Ports: model.PortList{
-				servicePort,
-			},
-				Hostname: "host", MeshExternal: false, Attributes: model.ServiceAttributes{Name: "svc", Namespace: "default"}}, nil)
+			defaultCluster := cb.buildDefaultCluster(tt.clusterName, tt.discovery, tt.endpoints, tt.direction, servicePort, &model.Service{
+				Ports: model.PortList{
+					servicePort,
+				},
+				Hostname: "host", MeshExternal: false, Attributes: model.ServiceAttributes{Name: "svc", Namespace: "default"},
+			}, nil)
 
 			if diff := cmp.Diff(defaultCluster, tt.expectedCluster, protocmp.Transform()); diff != "" {
 				t.Errorf("Unexpected default cluster, diff: %v", diff)

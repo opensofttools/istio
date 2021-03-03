@@ -97,21 +97,6 @@ var (
 		"Enables the use of HTTP 1.0 in the outbound HTTP listeners, to support legacy applications.",
 	).Get()
 
-	initialFetchTimeoutVar = env.RegisterDurationVar(
-		"PILOT_INITIAL_FETCH_TIMEOUT",
-		0,
-		"Specifies the initial_fetch_timeout for config. If this time is reached without "+
-			"a response to the config requested by Envoy, the Envoy will move on with the init phase. "+
-			"This prevents envoy from getting stuck waiting on config during startup.",
-	)
-	InitialFetchTimeout = func() *duration.Duration {
-		timeout, f := initialFetchTimeoutVar.Lookup()
-		if !f {
-			return nil
-		}
-		return ptypes.DurationProto(timeout)
-	}()
-
 	TerminationDrainDuration = env.RegisterIntVar(
 		"TERMINATION_DRAIN_DURATION_SECONDS",
 		5,
@@ -198,6 +183,13 @@ var (
 		"If enabled, for a headless service/stateful set in Kubernetes, pilot will generate an "+
 			"outbound listener for each pod in a headless service. This feature should be disabled "+
 			"if headless services have a large number of pods.",
+	).Get()
+
+	EnableRemoteJwks = env.RegisterBoolVar(
+		"PILOT_JWT_ENABLE_REMOTE_JWKS",
+		false,
+		"If enabled, checks to see if the configured JwksUri in RequestAuthentication is a mesh cluster URL "+
+			"and configures Remote Jwks to let Envoy fetch the Jwks instead of Istiod.",
 	).Get()
 
 	EnableEDSForHeadless = env.RegisterBoolVar(
@@ -294,9 +286,9 @@ var (
 		return ptypes.DurationProto(defaultRequestTimeoutVar.Get())
 	}()
 
-	EnableServiceApis = env.RegisterBoolVar("PILOT_ENABLED_SERVICE_APIS", false,
-		"If this is set to true, support for Kubernetes service-apis (github.com/kubernetes-sigs/service-apis) will "+
-			" be enabled. This feature is currently experimental, and is off by default.").Get()
+	EnableServiceApis = env.RegisterBoolVar("PILOT_ENABLED_SERVICE_APIS", true,
+		"If this is set to true, support for Kubernetes gateway-api (github.com/kubernetes-sigs/gateway-api) will "+
+			" be enabled. In addition to this being enabled, the gateway-api CRDs need to be installed.").Get()
 
 	EnableVirtualServiceDelegate = env.RegisterBoolVar(
 		"PILOT_ENABLE_VIRTUAL_SERVICE_DELEGATE",
@@ -352,7 +344,7 @@ var (
 		"If true, Pilot will collect metrics for XDS cache efficiency.").Get()
 
 	XDSCacheMaxSize = env.RegisterIntVar("PILOT_XDS_CACHE_SIZE", 20000,
-		"The maximum number of cache entries for the XDS cache. If the size is <= 0, the cache will have no upper bound.").Get()
+		"The maximum number of cache entries for the XDS cache.").Get()
 
 	AllowMetadataCertsInMutualTLS = env.RegisterBoolVar("PILOT_ALLOW_METADATA_CERTS_DR_MUTUAL_TLS", false,
 		"If true, Pilot will allow certs specified in Metadata to override DR certs in MUTUAL TLS mode. "+
@@ -366,9 +358,6 @@ var (
 		"If true, Istiod will set the pod fsGroup to 1337 on injection. This is required for Kubernetes 1.18 and older "+
 			`(see https://github.com/kubernetes/kubernetes/issues/57923 for details) unless JWT_POLICY is "first-party-jwt".`).Get()
 
-	EnableTLSv2OnInboundPath = env.RegisterBoolVar("PILOT_SIDECAR_ENABLE_INBOUND_TLS_V2", true,
-		"If true, Pilot will set the TLS version on server side as TLSv1_2 and also enforce strong cipher suites").Get()
-
 	XdsPushSendTimeout = env.RegisterDurationVar(
 		"PILOT_XDS_SEND_TIMEOUT",
 		5*time.Second,
@@ -379,15 +368,18 @@ var (
 		"If true, pilot will add telemetry related metadata to Endpoint resource, which will be consumed by telemetry filter.",
 	).Get()
 
-	WorkloadEntryAutoRegistration = env.RegisterBoolVar("PILOT_ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION", false,
+	WorkloadEntryAutoRegistration = env.RegisterBoolVar("PILOT_ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION", true,
 		"Enables auto-registering WorkloadEntries based on associated WorkloadGroups upon XDS connection by the workload.").Get()
 
 	WorkloadEntryCleanupGracePeriod = env.RegisterDurationVar("PILOT_WORKLOAD_ENTRY_GRACE_PERIOD", 10*time.Second,
 		"The amount of time an auto-registered workload can remain disconnected from all Pilot instances before the "+
 			"associated WorkloadEntry is cleaned up.").Get()
 
-	WorkloadEntryHealthChecks = env.RegisterBoolVar("PILOT_ENABLE_WORKLOAD_ENTRY_HEALTHCHECKS", false,
+	WorkloadEntryHealthChecks = env.RegisterBoolVar("PILOT_ENABLE_WORKLOAD_ENTRY_HEALTHCHECKS", true,
 		"Enables automatic health checks of WorkloadEntries based on the config provided in the associated WorkloadGroup").Get()
+
+	WorkloadEntryCrossCluster = env.RegisterBoolVar("PILOT_ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY", false,
+		"If enabled, pilot will read WorkloadEntry from other clusters, selectable by Services in that cluster.").Get()
 
 	EnableFlowControl = env.RegisterBoolVar(
 		"PILOT_ENABLE_FLOW_CONTROL",
@@ -406,4 +398,38 @@ var (
 	PilotEnableLoopBlockers = env.RegisterBoolVar("PILOT_ENABLE_LOOP_BLOCKER", true,
 		"If enabled, Envoy will be configured to prevent traffic directly the the inbound/outbound "+
 			"ports (15001/15006). This prevents traffic loops. This option will be removed, and considered always enabled, in 1.9.").Get()
+
+	EnableDestinationRuleInheritance = env.RegisterBoolVar(
+		"PILOT_ENABLE_DESTINATION_RULE_INHERITANCE",
+		false,
+		"If set, workload specific DestinationRules will inherit configurations settings from mesh and namespace level rules",
+	).Get()
+
+	StatusMaxWorkers = env.RegisterIntVar("PILOT_STATUS_MAX_WORKERS", 100, "The maximum number of workers"+
+		" Pilot will use to keep configuration status up to date.  Smaller numbers will result in higher status latency, "+
+		"but larger numbers may impact CPU in high scale environments.")
+
+	WasmRemoteLoadConversion = env.RegisterBoolVar("ISTIO_AGENT_ENABLE_WASM_REMOTE_LOAD_CONVERSION", true,
+		"If enabled, Istio agent will intercept ECDS resource update, downloads Wasm module, "+
+			"and replaces Wasm module remote load with downloaded local module file.").Get()
+
+	PilotJwtPubKeyRefreshInterval = env.RegisterDurationVar(
+		"PILOT_JWT_PUB_KEY_REFRESH_INTERVAL",
+		20*time.Minute,
+		"The interval for istiod to fetch the jwks_uri for the jwks public key.",
+	).Get()
+
+	EnableInboundPassthrough = env.RegisterBoolVar(
+		"PILOT_ENABLE_INBOUND_PASSTHROUGH",
+		true,
+		"If enabled, inbound clusters will be configured as ORIGINAL_DST clusters. When disabled, "+
+			"requests are always sent to localhost. The primary implication of this is that when enabled, binding to POD_IP "+
+			"will work while localhost will not; when disable, bind to POD_IP will not work, while localhost will. "+
+			"The enabled behavior matches the behavior without Istio enabled at all; this flag exists only for backwards compatibility. "+
+			"Regardless of this setting, the configuration can be overridden with the Sidecar.Ingress.DefaultEndpoint configuration.",
+	).Get()
+
+	StripHostPort = env.RegisterBoolVar("ISTIO_GATEWAY_STRIP_HOST_PORT", false,
+		"If enabled, Gateway will remove any port from host/authority header "+
+			"before any processing of request by HTTP filters or routing.").Get()
 )

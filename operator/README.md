@@ -54,16 +54,7 @@ for details.
 
 The quick start describes how to install and use the operator `mesh` CLI command and/or controller.
 
-### Building
-
-If you're trying to do a local build that bypasses the build container, you'll need to
-to execute the following step one time.
-
-```bash
-GO111MODULE=on go get github.com/jteeuwen/go-bindata/go-bindata@6025e8de665b
-```
-
-#### CLI
+### CLI
 
 To build the operator CLI, simply:
 
@@ -73,7 +64,7 @@ make build
 
 Ensure the created binary is in your PATH to run the examples below.
 
-#### Controller (in cluster)
+### Controller (in cluster)
 
 Building a custom controller requires a Dockerhub (or similar) account. To build using the container based build:
 
@@ -95,7 +86,7 @@ kubectl apply -f operator/samples/default-install.yaml
 This installs the controller into the cluster in the istio-operator namespace. The controller in turns installs
 the Istio control plane into the istio-system namespace by default.
 
-#### Controller (running locally)
+### Controller (running locally)
 
 1. Set env $WATCH_NAMESPACE (default value is "istio-system") and $LEADER_ELECTION_NAMESPACE (default value is "istio-operator")
 
@@ -329,17 +320,17 @@ spec:
           requests:
             cpu: 1000m # override from default 500m
             memory: 4096Mi # ... default 2048Mi
-          hpaSpec:
-            maxReplicas: 10 # ... default 5
-            minReplicas: 2  # ... default 1
-          nodeSelector: # ... default empty
-            master: "true"
-          tolerations: # ... default empty
-          - key: dedicated
-            operator: Exists
-            effect: NoSchedule
-          - key: CriticalAddonsOnly
-            operator: Exists
+        hpaSpec:
+          maxReplicas: 10 # ... default 5
+          minReplicas: 2  # ... default 1
+        nodeSelector: # ... default empty
+          master: "true"
+        tolerations: # ... default empty
+        - key: dedicated
+          operator: Exists
+          effect: NoSchedule
+        - key: CriticalAddonsOnly
+          operator: Exists
 ```
 
 The K8s settings are defined in detail in the

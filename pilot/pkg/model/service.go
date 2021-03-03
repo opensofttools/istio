@@ -405,11 +405,17 @@ type IstioEndpoint struct {
 	// TLSMode endpoint is injected with istio sidecar and ready to configure Istio mTLS
 	TLSMode string
 
-	// Namespace that this endpont belongs to. This is for telemetry purpose.
+	// Namespace that this endpoint belongs to. This is for telemetry purpose.
 	Namespace string
 
 	// Name of the workload that this endpoint belongs to. This is for telemetry purpose.
 	WorkloadName string
+
+	// Specifies the hostname of the Pod, empty for vm workload.
+	HostName string
+
+	// If specified, the fully qualified Pod hostname will be "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>".
+	SubDomain string
 
 	// The ingress tunnel supportability of this endpoint.
 	// If this endpoint sidecar proxy does not support h2 tunnel, this endpoint will not show up in the EDS clusters
@@ -558,6 +564,11 @@ func BuildSubsetKey(direction TrafficDirection, subsetName string, hostname host
 	return string(direction) + "|" + strconv.Itoa(port) + "|" + subsetName + "|" + string(hostname)
 }
 
+// BuildInboundSubsetKey generates a unique string referencing service instances with port.
+func BuildInboundSubsetKey(port int) string {
+	return BuildSubsetKey(TrafficDirectionInbound, "", "", port)
+}
+
 // BuildDNSSrvSubsetKey generates a unique string referencing service instances for a given service name, a subset and a port.
 // The proxy queries Pilot with this key to obtain the list of instances in a subset.
 // This is used only for the SNI-DNAT router. Do not use for other purposes.
@@ -620,7 +631,7 @@ func (s *Service) GetServiceAddressForProxy(node *Proxy, push *PushContext) stri
 // and apply custom transport socket matchers here.
 func GetTLSModeFromEndpointLabels(labels map[string]string) string {
 	if labels != nil {
-		if val, exists := labels[label.TLSMode]; exists {
+		if val, exists := labels[label.SecurityTlsMode.Name]; exists {
 			return val
 		}
 	}

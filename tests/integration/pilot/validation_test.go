@@ -69,7 +69,6 @@ func TestValidation(t *testing.T) {
 		// Limit to Kube environment as we're testing integration of webhook with K8s.
 
 		RunParallel(func(ctx framework.TestContext) {
-
 			dataset := loadTestData(ctx)
 
 			denied := func(err error) bool {
@@ -122,8 +121,8 @@ func TestValidation(t *testing.T) {
 						}
 
 						wetRunErr := cluster.ApplyYAMLFiles(ns.Name(), applyFiles...)
-						ctx.WhenDone(func() error {
-							return cluster.DeleteYAMLFiles(ns.Name(), applyFiles...)
+						ctx.ConditionalCleanup(func() {
+							cluster.DeleteYAMLFiles(ns.Name(), applyFiles...)
 						})
 
 						if dryRunErr != nil && wetRunErr == nil {
@@ -147,7 +146,8 @@ var ignoredCRDs = []string{
 	"/v1/Secret",
 	"/v1/Service",
 	"/v1/ConfigMap",
-	"apiextensions.k8s.io/v1beta1/CustomResourceDefinition",
+	"apiextensions.k8s.io/v1/CustomResourceDefinition",
+	"admissionregistration.k8s.io/v1/MutatingWebhookConfiguration",
 	"apps/v1/Deployment",
 	"extensions/v1beta1/Ingress",
 }
@@ -158,7 +158,6 @@ func TestEnsureNoMissingCRDs(t *testing.T) {
 	// types that are no longer supported.
 	framework.NewTest(t).
 		Run(func(ctx framework.TestContext) {
-
 			ignored := make(map[string]struct{})
 			for _, ig := range ignoredCRDs {
 				ignored[ig] = struct{}{}

@@ -159,7 +159,7 @@ func (h *LocalDNSServer) UpdateLookupTable(nt *nds.NameTable) {
 // ServerDNS is the implementation of DNS interface
 func (h *LocalDNSServer) ServeDNS(proxy *dnsProxy, w dns.ResponseWriter, req *dns.Msg) {
 	var response *dns.Msg
-	log := log
+	log := log.WithLabels("protocol", proxy.protocol)
 	if log.DebugEnabled() {
 		id := uuid.New()
 		log = log.WithLabels("id", id)
@@ -206,8 +206,72 @@ func (h *LocalDNSServer) ServeDNS(proxy *dnsProxy, w dns.ResponseWriter, req *dn
 		// We did not find the host in our internal cache. Query upstream and return the response as is.
 		response = h.queryUpstream(proxy.upstreamClient, req)
 	}
+
+	roundRobinResponse(response)
 	_ = w.WriteMsg(response)
 	log.Debugf("response for hostname %q (found=%v): %v", hostname, hostFound, response)
+}
+
+// Inspired by https://github.com/coredns/coredns/blob/master/plugin/loadbalance/loadbalance.go
+func roundRobinResponse(res *dns.Msg) {
+	if res.Rcode != dns.RcodeSuccess {
+		return
+	}
+
+	if res.Question[0].Qtype == dns.TypeAXFR || res.Question[0].Qtype == dns.TypeIXFR {
+		return
+	}
+
+	res.Answer = roundRobin(res.Answer)
+	res.Ns = roundRobin(res.Ns)
+	res.Extra = roundRobin(res.Extra)
+}
+
+func roundRobin(in []dns.RR) []dns.RR {
+	cname := []dns.RR{}
+	address := []dns.RR{}
+	mx := []dns.RR{}
+	rest := []dns.RR{}
+	for _, r := range in {
+		switch r.Header().Rrtype {
+		case dns.TypeCNAME:
+			cname = append(cname, r)
+		case dns.TypeA, dns.TypeAAAA:
+			address = append(address, r)
+		case dns.TypeMX:
+			mx = append(mx, r)
+		default:
+			rest = append(rest, r)
+		}
+	}
+
+	roundRobinShuffle(address)
+	roundRobinShuffle(mx)
+
+	out := append(cname, rest...)
+	out = append(out, address...)
+	out = append(out, mx...)
+	return out
+}
+
+func roundRobinShuffle(records []dns.RR) {
+	switch l := len(records); l {
+	case 0, 1:
+		break
+	case 2:
+		if dns.Id()%2 == 0 {
+			records[0], records[1] = records[1], records[0]
+		}
+	default:
+		for j := 0; j < l*(int(dns.Id())%4+1); j++ {
+			q := int(dns.Id()) % l
+			p := int(dns.Id()) % l
+			if q == p {
+				p = (p + 1) % l
+			}
+			records[q], records[p] = records[p], records[q]
+		}
+	}
 }
 
 func (h *LocalDNSServer) Close() {
@@ -343,8 +407,11 @@ func (table *LookupTable) buildDNSAnswers(altHosts map[string]struct{}, ipv4 []n
 			// do sequential dns resolution, starting with the first search namespace)
 
 			// host h already ends with a .
-			// search namespace does not. So we append one in the end
-			expandedHost := strings.ToLower(h + searchNamespaces[0] + ".")
+			// search namespace might not. So we append one in the end if needed
+			expandedHost := strings.ToLower(h + searchNamespaces[0])
+			if !strings.HasSuffix(searchNamespaces[0], ".") {
+				expandedHost += "."
+			}
 			// make sure this is not a proper hostname
 			// if host is productpage, and search namespace is ns1.svc.cluster.local
 			// then the expanded host productpage.ns1.svc.cluster.local is a valid hostname

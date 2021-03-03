@@ -202,7 +202,7 @@ func convertServices(cfg config.Config) []*model.Service {
 						Ports:        svcPorts,
 						Resolution:   resolution,
 						Attributes: model.ServiceAttributes{
-							ServiceRegistry: string(serviceregistry.External),
+							ServiceRegistry: serviceregistry.External,
 							Name:            hostname,
 							Namespace:       cfg.Namespace,
 							ExportTo:        exportTo,
@@ -221,7 +221,7 @@ func convertServices(cfg config.Config) []*model.Service {
 				Ports:        svcPorts,
 				Resolution:   resolution,
 				Attributes: model.ServiceAttributes{
-					ServiceRegistry: string(serviceregistry.External),
+					ServiceRegistry: serviceregistry.External,
 					Name:            hostname,
 					Namespace:       cfg.Namespace,
 					ExportTo:        exportTo,
@@ -339,7 +339,7 @@ func getTLSModeFromWorkloadEntry(wle *networking.WorkloadEntry) string {
 	// * Use security.istio.io/tlsMode if its present
 	// * If not, set TLS mode if ServiceAccount is specified
 	tlsMode := model.DisabledTLSModeLabel
-	if val, exists := wle.Labels[label.TLSMode]; exists {
+	if val, exists := wle.Labels[label.SecurityTlsMode.Name]; exists {
 		tlsMode = val
 	} else if wle.ServiceAccount != "" {
 		tlsMode = model.IstioMutualTLSModeLabel

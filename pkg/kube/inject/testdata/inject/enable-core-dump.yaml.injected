@@ -106,7 +106,6 @@ spec:
         - name: TRUST_DOMAIN
           value: cluster.local
         image: gcr.io/istio-testing/proxyv2:latest
-        imagePullPolicy: Always
         name: istio-proxy
         ports:
         - containerPort: 15090
@@ -168,7 +167,6 @@ spec:
         - -d
         - 15090,15021,15020
         image: gcr.io/istio-testing/proxyv2:latest
-        imagePullPolicy: Always
         name: istio-init
         resources:
           limits:
@@ -192,11 +190,11 @@ spec:
           runAsUser: 0
       - args:
         - -c
-        - sysctl -w kernel.core_pattern=/var/lib/istio/data/core.proxy && ulimit -c unlimited
+        - sysctl -w kernel.core_pattern=/var/lib/istio/data/core.proxy && ulimit -c
+          unlimited
         command:
         - /bin/sh
         image: gcr.io/istio-testing/proxyv2:latest
-        imagePullPolicy: Always
         name: enable-core-dump
         resources: {}
         securityContext:
