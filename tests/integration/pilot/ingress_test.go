@@ -89,6 +89,31 @@ spec:
   - forwardTo:
      - serviceName: b
        port: 80
+---
+apiVersion: networking.x-k8s.io/v1alpha1
+kind: HTTPRoute
+metadata:
+  name: b
+spec:
+  gateways:
+    allow: FromList
+    gatewayRefs:
+      - name: mesh
+        namespace: istio-system
+  hostnames: ["b"]
+  rules:
+  - matches:
+    - path:
+        type: Prefix
+        value: /path
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+          my-added-header: added-value
+    forwardTo:
+    - serviceName: b
+      port: 80
 `)
 
 			ctx.NewSubTest("http").Run(func(ctx framework.TestContext) {
@@ -116,6 +141,14 @@ spec:
 						"Host": {"my.domain.example"},
 					},
 					Validator: echo.ExpectOK(),
+				})
+			})
+			ctx.NewSubTest("mesh").Run(func(ctx framework.TestContext) {
+				_ = apps.PodA[0].CallWithRetryOrFail(ctx, echo.CallOptions{
+					Target:    apps.PodB[0],
+					PortName:  "http",
+					Path:      "/path",
+					Validator: echo.And(echo.ExpectOK(), echo.ExpectKey("My-Added-Header", "added-value")),
 				})
 			})
 		})
@@ -260,7 +293,7 @@ spec:
 
 			ctx.NewSubTest("status").Run(func(ctx framework.TestContext) {
 				if !ctx.Environment().(*kube.Environment).Settings().LoadBalancerSupported {
-					t.Skip("ingress status not supported without load balancer")
+					ctx.Skip("ingress status not supported without load balancer")
 				}
 
 				ip := apps.Ingress.HTTPAddress().IP.String()
@@ -355,6 +388,10 @@ func TestCustomGateway(t *testing.T) {
 		Features("traffic.ingress.custom").
 		Run(func(ctx framework.TestContext) {
 			gatewayNs := namespace.NewOrFail(t, ctx, namespace.Config{Prefix: "custom-gateway"})
+			injectLabel := `sidecar.istio.io/inject: "true"`
+			if len(ctx.Settings().Revision) > 0 {
+				injectLabel = fmt.Sprintf(`istio.io/rev: "%v"`, ctx.Settings().Revision)
+			}
 			ctx.Config().ApplyYAMLOrFail(t, gatewayNs.Name(), fmt.Sprintf(`apiVersion: v1
 kind: Service
 metadata:
@@ -382,7 +419,7 @@ spec:
         inject.istio.io/templates: gateway
       labels:
         istio: custom
-        sidecar.istio.io/inject: "true"
+        %v
     spec:
       containers:
       - name: istio-proxy
@@ -418,7 +455,7 @@ spec:
         host: %s
         port:
           number: 80
-`, apps.PodA[0].Config().FQDN()))
+`, injectLabel, apps.PodA[0].Config().FQDN()))
 			apps.PodB[0].CallWithRetryOrFail(t, echo.CallOptions{
 				Port:      &echo.Port{ServicePort: 80},
 				Scheme:    scheme.HTTP,

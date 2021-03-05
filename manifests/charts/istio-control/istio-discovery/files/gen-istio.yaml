@@ -214,6 +214,7 @@ data:
           annotations: {
             {{- if eq (len $containers) 1 }}
             kubectl.kubernetes.io/default-logs-container: "{{ index $containers 0 }}",
+            kubectl.kubernetes.io/default-container: "{{ index $containers 0 }}",
             {{ end }}
         {{- if .Values.istio_cni.enabled }}
             {{- if not .Values.istio_cni.chained }}
@@ -709,6 +710,7 @@ data:
           annotations: {
             {{- if eq (len $containers) 1 }}
             kubectl.kubernetes.io/default-logs-container: "{{ index $containers 0 }}",
+            kubectl.kubernetes.io/default-container: "{{ index $containers 0 }}",
             {{ end }}
           }
         spec:
@@ -1346,15 +1348,7 @@ spec:
                   value: |
                     {
                       "debug": "false",
-                      "stat_prefix": "istio",
-                      "metrics": [
-                        {
-                          "dimensions": {
-                            "source_cluster": "node.metadata['CLUSTER_ID']",
-                            "destination_cluster": "upstream_peer.cluster_id"
-                          }
-                        }
-                      ]
+                      "stat_prefix": "istio"
                     }
                 vm_config:
                   vm_id: stats_outbound
@@ -1431,15 +1425,7 @@ spec:
                     {
                       "debug": "false",
                       "stat_prefix": "istio",
-                      "disable_host_header_fallback": true,
-                      "metrics": [
-                        {
-                          "dimensions": {
-                            "source_cluster": "node.metadata['CLUSTER_ID']",
-                            "destination_cluster": "upstream_peer.cluster_id"
-                          }
-                        }
-                      ]
+                      "disable_host_header_fallback": true
                     }
                 vm_config:
                   vm_id: stats_outbound
@@ -1523,15 +1509,7 @@ spec:
                   value: |
                     {
                       "debug": "false",
-                      "stat_prefix": "istio",
-                      "metrics": [
-                        {
-                          "dimensions": {
-                            "source_cluster": "node.metadata['CLUSTER_ID']",
-                            "destination_cluster": "upstream_peer.cluster_id"
-                          }
-                        }
-                      ]
+                      "stat_prefix": "istio"
                     }
                 vm_config:
                   vm_id: tcp_stats_outbound
@@ -1563,15 +1541,7 @@ spec:
                   value: |
                     {
                       "debug": "false",
-                      "stat_prefix": "istio",
-                      "metrics": [
-                        {
-                          "dimensions": {
-                            "source_cluster": "node.metadata['CLUSTER_ID']",
-                            "destination_cluster": "upstream_peer.cluster_id"
-                          }
-                        }
-                      ]
+                      "stat_prefix": "istio"
                     }
                 vm_config:
                   vm_id: tcp_stats_outbound

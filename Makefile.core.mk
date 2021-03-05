@@ -185,6 +185,9 @@ ifeq ($(HUB),)
   $(error "HUB cannot be empty")
 endif
 
+# For dockerx builds, allow HUBS which is a space seperated list of hubs. Default to HUB.
+HUBS ?= $(HUB)
+
 # If tag not explicitly set in users' .istiorc.mk or command line, default to the git sha.
 TAG ?= $(shell git rev-parse --verify HEAD)
 ifeq ($(TAG),)
@@ -250,7 +253,7 @@ ${GEN_CERT}:
 #-----------------------------------------------------------------------------
 # Target: precommit
 #-----------------------------------------------------------------------------
-.PHONY: precommit format format.gofmt format.goimports lint buildcache
+.PHONY: precommit format lint buildcache
 
 # Target run by the pre-commit script, to automate formatting and lint
 # If pre-commit script is not used, please run this manually.
