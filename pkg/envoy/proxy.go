@@ -112,16 +112,18 @@ func (e *envoy) args(fname string, epoch int, bootstrapConfig string) []string {
 		"-c", fname,
 		"--restart-epoch", fmt.Sprint(epoch),
 		"--drain-time-s", fmt.Sprint(int(convertDuration(e.Config.DrainDuration) / time.Second)),
+		"--drain-strategy", "immediate", // Clients are notified as soon as the drain process starts.
 		"--parent-shutdown-time-s", fmt.Sprint(int(convertDuration(e.Config.ParentShutdownDuration) / time.Second)),
 		"--service-cluster", e.Config.ServiceCluster,
 		"--service-node", e.Node,
 		"--local-address-ip-version", proxyLocalAddressType,
 		"--bootstrap-version", "3",
+		"--disable-hot-restart", // We don't use it, so disable it to simplify Envoy's logic
 	}
 	if e.ProxyConfig.LogAsJSON {
 		startupArgs = append(startupArgs,
 			"--log-format",
-			`{"level":"%l","time":"%Y-%m-%dT%T.%fZ","scope":"envoy %n","msg":"%_"}`,
+			`{"level":"%l","time":"%Y-%m-%dT%T.%fZ","scope":"envoy %n","msg":"%j"}`,
 		)
 	} else {
 		// format is like `2020-04-07T16:52:30.471425Z     info    envoy config   ...message..

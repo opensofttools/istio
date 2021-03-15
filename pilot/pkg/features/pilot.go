@@ -97,15 +97,6 @@ var (
 		"Enables the use of HTTP 1.0 in the outbound HTTP listeners, to support legacy applications.",
 	).Get()
 
-	TerminationDrainDuration = env.RegisterIntVar(
-		"TERMINATION_DRAIN_DURATION_SECONDS",
-		5,
-		"The amount of time allowed for connections to complete on pilot-agent shutdown. "+
-			"On receiving SIGTERM or SIGINT, pilot-agent tells the active Envoy to start draining, "+
-			"preventing any new connections and allowing existing connections to complete. It then "+
-			"sleeps for the TerminationDrainDuration and then kills any remaining active Envoy processes.",
-	)
-
 	// EnableMysqlFilter enables injection of `envoy.filters.network.mysql_proxy` in the filter chain.
 	// Pilot injects this outbound filter if the service port name is `mysql`.
 	EnableMysqlFilter = env.RegisterBoolVar(
@@ -299,7 +290,7 @@ var (
 	EnableDebugOnHTTP = env.RegisterBoolVar("ENABLE_DEBUG_ON_HTTP", true,
 		"If this is set to false, the debug interface will not be ebabled on Http, recommended for production").Get()
 
-	EnableAdminEndpoints = env.RegisterBoolVar("ENABLE_ADMIN_ENDPOINTS", false,
+	EnableUnsafeAdminEndpoints = env.RegisterBoolVar("UNSAFE_ENABLE_ADMIN_ENDPOINTS", false,
 		"If this is set to true, dangerous admin endpoins will be exposed on the debug interface. Not recommended for production.").Get()
 
 	XDSAuth = env.RegisterBoolVar("XDS_AUTH", true,
@@ -314,9 +305,11 @@ var (
 	EnableServiceEntrySelectPods = env.RegisterBoolVar("PILOT_ENABLE_SERVICEENTRY_SELECT_PODS", true,
 		"If enabled, service entries with selectors will select pods from the cluster. "+
 			"It is safe to disable it if you are quite sure you don't need this feature").Get()
+
 	EnableK8SServiceSelectWorkloadEntries = env.RegisterBoolVar("PILOT_ENABLE_K8S_SELECT_WORKLOAD_ENTRIES", true,
 		"If enabled, Kubernetes services with selectors will select workload entries with matching labels. "+
 			"It is safe to disable it if you are quite sure you don't need this feature").Get()
+
 	InjectionWebhookConfigName = env.RegisterStringVar("INJECTION_WEBHOOK_CONFIG_NAME", "istio-sidecar-injector",
 		"Name of the mutatingwebhookconfiguration to patch, if istioctl is not used.")
 
@@ -387,10 +380,6 @@ var (
 		"If set, the max amount of time to delay a push by. Depends on PILOT_ENABLE_FLOW_CONTROL.",
 	).Get()
 
-	PilotEnableLoopBlockers = env.RegisterBoolVar("PILOT_ENABLE_LOOP_BLOCKER", true,
-		"If enabled, Envoy will be configured to prevent traffic directly the the inbound/outbound "+
-			"ports (15001/15006). This prevents traffic loops. This option will be removed, and considered always enabled, in 1.9.").Get()
-
 	EnableDestinationRuleInheritance = env.RegisterBoolVar(
 		"PILOT_ENABLE_DESTINATION_RULE_INHERITANCE",
 		false,
@@ -428,9 +417,14 @@ var (
 	// EnableUnsafeAssertions enables runtime checks to test assertions in our code. This should never be enabled in
 	// production; when assertions fail Istio will panic.
 	EnableUnsafeAssertions = env.RegisterBoolVar(
-		"PILOT_ENABLE_UNSAFE_RUNTIME_ASSERTIONS",
+		"UNSAFE_PILOT_ENABLE_RUNTIME_ASSERTIONS",
 		false,
 		"If enabled, addition runtime asserts will be performed. "+
 			"These checks are both expensive and panic on failure. As a result, this should be used only for testing.",
 	).Get()
 )
+
+// UnsafeFeaturesEnabled returns true if any unsafe features are enabled.
+func UnsafeFeaturesEnabled() bool {
+	return EnableUnsafeAdminEndpoints || EnableUnsafeAssertions
+}
