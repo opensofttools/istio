@@ -18,7 +18,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -88,9 +87,10 @@ type XdsProxy struct {
 	xdsUdsPath           string
 
 	// connected stores the active gRPC stream. The proxy will only have 1 connection at a time
-	connected      *ProxyConnection
-	initialRequest *discovery.DiscoveryRequest
-	connectedMutex sync.RWMutex
+	connected           *ProxyConnection
+	initialRequest      *discovery.DiscoveryRequest
+	initialDeltaRequest *discovery.DeltaDiscoveryRequest
+	connectedMutex      sync.RWMutex
 
 	// Wasm cache and ecds channel are used to replace wasm remote load with local file.
 	wasmCache wasm.Cache
@@ -183,21 +183,39 @@ func initXdsProxy(ia *Agent) (*XdsProxy, error) {
 		}
 	}()
 
-	go proxy.healthChecker.PerformApplicationHealthCheck(func(healthEvent *health.ProbeEvent) {
-		var req *discovery.DiscoveryRequest
-		if healthEvent.Healthy {
-			req = &discovery.DiscoveryRequest{TypeUrl: v3.HealthInfoType}
-		} else {
-			req = &discovery.DiscoveryRequest{
-				TypeUrl: v3.HealthInfoType,
-				ErrorDetail: &google_rpc.Status{
-					Code:    int32(codes.Internal),
-					Message: healthEvent.UnhealthyMessage,
-				},
+	if features.DeltaXds.Get() {
+		go proxy.healthChecker.PerformApplicationHealthCheck(func(healthEvent *health.ProbeEvent) {
+			var req *discovery.DeltaDiscoveryRequest
+			if healthEvent.Healthy {
+				req = &discovery.DeltaDiscoveryRequest{TypeUrl: v3.HealthInfoType}
+			} else {
+				req = &discovery.DeltaDiscoveryRequest{
+					TypeUrl: v3.HealthInfoType,
+					ErrorDetail: &google_rpc.Status{
+						Code:    int32(codes.Internal),
+						Message: healthEvent.UnhealthyMessage,
+					},
+				}
 			}
-		}
-		proxy.PersistRequest(req)
-	}, proxy.stopChan)
+			proxy.PersistDeltaRequest(req)
+		}, proxy.stopChan)
+	} else {
+		go proxy.healthChecker.PerformApplicationHealthCheck(func(healthEvent *health.ProbeEvent) {
+			var req *discovery.DiscoveryRequest
+			if healthEvent.Healthy {
+				req = &discovery.DiscoveryRequest{TypeUrl: v3.HealthInfoType}
+			} else {
+				req = &discovery.DiscoveryRequest{
+					TypeUrl: v3.HealthInfoType,
+					ErrorDetail: &google_rpc.Status{
+						Code:    int32(codes.Internal),
+						Message: healthEvent.UnhealthyMessage,
+					},
+				}
+			}
+			proxy.PersistRequest(req)
+		}, proxy.stopChan)
+	}
 	return proxy, nil
 }
 
@@ -239,13 +257,17 @@ func (p *XdsProxy) RegisterStream(c *ProxyConnection) {
 }
 
 type ProxyConnection struct {
-	upstreamError   chan error
-	downstreamError chan error
-	requestsChan    chan *discovery.DiscoveryRequest
-	responsesChan   chan *discovery.DiscoveryResponse
-	stopChan        chan struct{}
-	downstream      discovery.AggregatedDiscoveryService_StreamAggregatedResourcesServer
-	upstream        discovery.AggregatedDiscoveryService_StreamAggregatedResourcesClient
+	upstreamError      chan error
+	downstreamError    chan error
+	requestsChan       chan *discovery.DiscoveryRequest
+	responsesChan      chan *discovery.DiscoveryResponse
+	deltaRequestsChan  chan *discovery.DeltaDiscoveryRequest
+	deltaResponsesChan chan *discovery.DeltaDiscoveryResponse
+	stopChan           chan struct{}
+	downstream         discovery.AggregatedDiscoveryService_StreamAggregatedResourcesServer
+	upstream           discovery.AggregatedDiscoveryService_StreamAggregatedResourcesClient
+	downstreamDeltas   discovery.AggregatedDiscoveryService_DeltaAggregatedResourcesServer
+	upstreamDeltas     discovery.AggregatedDiscoveryService_DeltaAggregatedResourcesClient
 }
 
 // Every time envoy makes a fresh connection to the agent, we reestablish a new connection to the upstream xds
@@ -493,10 +515,6 @@ func forwardToEnvoy(con *ProxyConnection, resp *discovery.DiscoveryResponse) {
 	}
 }
 
-func (p *XdsProxy) DeltaAggregatedResources(server discovery.AggregatedDiscoveryService_DeltaAggregatedResourcesServer) error {
-	return errors.New("delta XDS is not implemented")
-}
-
 func (p *XdsProxy) close() {
 	close(p.stopChan)
 	p.wasmCache.Cleanup()
@@ -515,16 +533,19 @@ func isExpectedGRPCError(err error) bool {
 		return true
 	}
 
-	s := status.Convert(err)
-	if s.Code() == codes.Canceled || s.Code() == codes.DeadlineExceeded {
+	if s, ok := status.FromError(err); ok {
+		if s.Code() == codes.Canceled || s.Code() == codes.DeadlineExceeded {
+			return true
+		}
+		if s.Code() == codes.Unavailable && (s.Message() == "client disconnected" || s.Message() == "transport is closing") {
+			return true
+		}
+	}
+	// If this is not a gRPCStatus we should just error message.
+	if strings.Contains(err.Error(), "stream terminated by RST_STREAM with error code: NO_ERROR") {
 		return true
 	}
-	if s.Code() == codes.Unavailable && (s.Message() == "client disconnected" || s.Message() == "transport is closing") {
-		return true
-	}
-	if s.Code() == codes.Internal && (s.Message() == "stream terminated by RST_STREAM with error code: NO_ERROR") {
-		return true
-	}
+
 	return false
 }
 

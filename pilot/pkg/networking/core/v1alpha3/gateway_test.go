@@ -147,32 +147,6 @@ func TestBuildGatewayListenerTlsContext(t *testing.T) {
 							},
 						},
 					},
-					ValidationContextType: &auth.CommonTlsContext_CombinedValidationContext{
-						CombinedValidationContext: &auth.CommonTlsContext_CombinedCertificateValidationContext{
-							DefaultValidationContext: &auth.CertificateValidationContext{},
-							ValidationContextSdsSecretConfig: &auth.SdsSecretConfig{
-								Name: "ROOTCA",
-								SdsConfig: &core.ConfigSource{
-									InitialFetchTimeout: ptypes.DurationProto(time.Second * 0),
-									ResourceApiVersion:  core.ApiVersion_V3,
-									ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
-										ApiConfigSource: &core.ApiConfigSource{
-											ApiType:                   core.ApiConfigSource_GRPC,
-											SetNodeOnFirstMessageOnly: true,
-											TransportApiVersion:       core.ApiVersion_V3,
-											GrpcServices: []*core.GrpcService{
-												{
-													TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
-														EnvoyGrpc: &core.GrpcService_EnvoyGrpc{ClusterName: model.SDSClusterName},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
 				},
 				RequireClientCertificate: proto.BoolFalse,
 			},
@@ -236,7 +210,6 @@ func TestBuildGatewayListenerTlsContext(t *testing.T) {
 					Mode:              networking.ServerTLSSettings_SIMPLE,
 					ServerCertificate: "server-cert.crt",
 					PrivateKey:        "private-key.key",
-					CaCertificates:    "ca-cert.crt",
 				},
 			},
 			result: &auth.DownstreamTlsContext{
@@ -256,31 +229,6 @@ func TestBuildGatewayListenerTlsContext(t *testing.T) {
 											{
 												TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
 													EnvoyGrpc: &core.GrpcService_EnvoyGrpc{ClusterName: model.SDSClusterName},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					ValidationContextType: &auth.CommonTlsContext_CombinedValidationContext{
-						CombinedValidationContext: &auth.CommonTlsContext_CombinedCertificateValidationContext{
-							DefaultValidationContext: &auth.CertificateValidationContext{},
-							ValidationContextSdsSecretConfig: &auth.SdsSecretConfig{
-								Name: "file-root:ca-cert.crt",
-								SdsConfig: &core.ConfigSource{
-									ResourceApiVersion: core.ApiVersion_V3,
-									ConfigSourceSpecifier: &core.ConfigSource_ApiConfigSource{
-										ApiConfigSource: &core.ApiConfigSource{
-											ApiType:                   core.ApiConfigSource_GRPC,
-											SetNodeOnFirstMessageOnly: true,
-											TransportApiVersion:       core.ApiVersion_V3,
-											GrpcServices: []*core.GrpcService{
-												{
-													TargetSpecifier: &core.GrpcService_EnvoyGrpc_{
-														EnvoyGrpc: &core.GrpcService_EnvoyGrpc{ClusterName: model.SDSClusterName},
-													},
 												},
 											},
 										},
@@ -1565,6 +1513,27 @@ func TestBuildGatewayListeners(t *testing.T) {
 				},
 			},
 			[]string{"0.0.0.0_80", "0.0.0.0_8080"},
+		},
+		{
+			"gateway with bind",
+			&pilot_model.Proxy{},
+			&networking.Gateway{
+				Servers: []*networking.Server{
+					{
+						Port: &networking.Port{Name: "http", Number: 80, Protocol: "HTTP"},
+					},
+					{
+						Port:  &networking.Port{Name: "http", Number: 8080, Protocol: "HTTP"},
+						Hosts: []string{"externalgatewayclient.com"},
+					},
+					{
+						Port:  &networking.Port{Name: "http", Number: 8080, Protocol: "HTTP"},
+						Bind:  "127.0.0.1",
+						Hosts: []string{"internalmesh.svc.cluster.local"},
+					},
+				},
+			},
+			[]string{"0.0.0.0_80", "0.0.0.0_8080", "127.0.0.1_8080"},
 		},
 	}
 

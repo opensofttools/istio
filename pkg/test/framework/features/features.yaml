@@ -48,6 +48,8 @@ features:
     ratelimit:
       envoy:
     original-source-ip:
+    mcs:
+      serviceexport:
   usability:
     observability:
       describe:
@@ -133,6 +135,7 @@ features:
       revision_centric_view:
       revision_tags:
     multicluster:
+      cluster_local:
       multimaster:
       remote:
       centralremotekubeconfig:

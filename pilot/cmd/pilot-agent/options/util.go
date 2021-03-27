@@ -12,19 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package caclient
+package options
 
 import (
-	"time"
-
-	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	"google.golang.org/grpc/codes"
+	"net"
 )
 
-// RetryOptions returns the default retry options recommended for CA calls
-// This includes 5 retries, with backoff from 100ms -> 1.6s with jitter.
-var RetryOptions = []retry.CallOption{
-	retry.WithMax(5),
-	retry.WithBackoff(retry.BackoffExponentialWithJitter(100*time.Millisecond, 0.1)),
-	retry.WithCodes(codes.Canceled, codes.DeadlineExceeded, codes.ResourceExhausted, codes.Aborted, codes.Internal, codes.Unavailable),
+// IsIPv6Proxy check the addresses slice and returns true for a valid IPv6 address
+// for all other cases it returns false
+func IsIPv6Proxy(ipAddrs []string) bool {
+	for i := 0; i < len(ipAddrs); i++ {
+		addr := net.ParseIP(ipAddrs[i])
+		if addr == nil {
+			// Should not happen, invalid IP in proxy's IPAddresses slice should have been caught earlier,
+			// skip it to prevent a panic.
+			continue
+		}
+		if addr.To4() != nil {
+			return false
+		}
+	}
+	return true
 }
