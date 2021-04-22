@@ -44,8 +44,8 @@ const (
 	// ports with plaintext: 8090 (http) and 8092 (tcp)
 	// ports with mTLS: 8091 (http), 8093 (tcp) and 9000 (tcp passthrough).
 	policy = `
-apiVersion: "security.istio.io/v1beta1"
-kind: "PeerAuthentication"
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
 metadata:
   name: "mtls"
 spec:
@@ -91,7 +91,7 @@ spec:
 func TestTrustDomainValidation(t *testing.T) {
 	framework.NewTest(t).Features("security.peer.trust-domain-validation").Run(
 		func(ctx framework.TestContext) {
-			// TODO: remove the skip when https://github.com/istio/istio/issues/28798 is fixed
+			// TODO https://github.com/istio/istio/issues/32294
 			if ctx.Clusters().IsMulticluster() {
 				ctx.Skip()
 			}

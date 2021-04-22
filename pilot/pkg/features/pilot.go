@@ -17,11 +17,12 @@ package features
 import (
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/duration"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"istio.io/istio/pkg/jwt"
 	"istio.io/pkg/env"
+	"istio.io/pkg/log"
 )
 
 var (
@@ -31,12 +32,21 @@ var (
 		"Sets the maximum number of concurrent grpc streams.",
 	).Get()
 
-	TraceSampling = env.RegisterFloatVar(
+	traceSamplingVar = env.RegisterFloatVar(
 		"PILOT_TRACE_SAMPLING",
 		1.0,
 		"Sets the mesh-wide trace sampling percentage. Should be 0.0 - 100.0. Precision to 0.01. "+
 			"Default is 1.0.",
-	).Get()
+	)
+
+	TraceSampling = func() float64 {
+		f := traceSamplingVar.Get()
+		if f < 0.0 || f > 100.0 {
+			log.Warnf("PILOT_TRACE_SAMPLING out of range: %v", f)
+			return 1.0
+		}
+		return f
+	}()
 
 	// EnableIstioTags controls whether or not to configure Envoy with support for Istio-specific tags
 	// in trace spans. This is a temporary flag for controlling the feature that will be replaced by
@@ -264,7 +274,7 @@ var (
 	)
 
 	DefaultRequestTimeout = func() *duration.Duration {
-		return ptypes.DurationProto(defaultRequestTimeoutVar.Get())
+		return durationpb.New(defaultRequestTimeoutVar.Get())
 	}()
 
 	EnableServiceApis = env.RegisterBoolVar("PILOT_ENABLED_SERVICE_APIS", true,
@@ -329,10 +339,6 @@ var (
 	XDSCacheMaxSize = env.RegisterIntVar("PILOT_XDS_CACHE_SIZE", 20000,
 		"The maximum number of cache entries for the XDS cache.").Get()
 
-	AllowMetadataCertsInMutualTLS = env.RegisterBoolVar("PILOT_ALLOW_METADATA_CERTS_DR_MUTUAL_TLS", false,
-		"If true, Pilot will allow certs specified in Metadata to override DR certs in MUTUAL TLS mode. "+
-			"This is only enabled for migration and will be removed soon.").Get()
-
 	// EnableLegacyFSGroupInjection has first-party-jwt as allowed because we only
 	// need the fsGroup configuration for the projected service account volume mount,
 	// which is only used by first-party-jwt. The installer will automatically
@@ -343,8 +349,15 @@ var (
 
 	XdsPushSendTimeout = env.RegisterDurationVar(
 		"PILOT_XDS_SEND_TIMEOUT",
-		5*time.Second,
+		0*time.Second,
 		"The timeout to send the XDS configuration to proxies. After this timeout is reached, Pilot will discard that push.",
+	).Get()
+
+	RemoteClusterTimeout = env.RegisterDurationVar(
+		"PILOT_REMOTE_CLUSTER_TIMEOUT",
+		30*time.Second,
+		"After this timeout expires, pilot can become ready without syncing data from clusters added via remote-secrets. "+
+			"Setting the timeout to 0 disables this behavior.",
 	).Get()
 
 	EndpointTelemetryLabel = env.RegisterBoolVar("PILOT_ENDPOINT_TELEMETRY_LABEL", true,
@@ -424,6 +437,15 @@ var (
 	DeltaXds = env.RegisterBoolVar("ISTIO_DELTA_XDS", false,
 		"If enabled, pilot will only send the delta configs as opposed to the state of the world on a "+
 			"Resource Request")
+
+	SharedMeshConfig = env.RegisterStringVar("SHARED_MESH_CONFIG", "",
+		"Additional config map to load for shared MeshConfig settings. The standard mesh config will take precedence.").Get()
+
+	MultiRootMesh = env.RegisterBoolVar("ISTIO_MULTIROOT_MESH", false,
+		"If enabled, mesh will support certificates signed by more than one trustAnchor for ISTIO_MUTUAL mTLS")
+
+	EnableEnvoyFilterMetrics = env.RegisterBoolVar("PILOT_ENVOY_FILTER_STATS", false,
+		"If true, Pilot will collect metrics for envoy filter operations.").Get()
 )
 
 // UnsafeFeaturesEnabled returns true if any unsafe features are enabled.

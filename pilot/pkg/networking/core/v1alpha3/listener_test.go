@@ -2032,9 +2032,9 @@ func TestHttpProxyListener_Tracing(t *testing.T) {
 
 	for _, tc := range customTagsTest {
 		featuresSet := false
-		capturedSamplingValue := pilotTraceSamplingEnv
+		capturedSamplingValue := features.TraceSampling
 		if tc.envPilotSampling != 0.0 {
-			pilotTraceSamplingEnv = tc.envPilotSampling
+			features.TraceSampling = tc.envPilotSampling
 			featuresSet = true
 		}
 
@@ -2063,7 +2063,7 @@ func TestHttpProxyListener_Tracing(t *testing.T) {
 		verifyHTTPConnectionManagerFilter(t, f, tc.out, tc.name)
 
 		if featuresSet {
-			pilotTraceSamplingEnv = capturedSamplingValue
+			features.TraceSampling = capturedSamplingValue
 		}
 	}
 }
@@ -2298,6 +2298,7 @@ func buildAllListeners(p plugin.Plugin, env *model.Environment, proxyVersion *mo
 func getFilterConfig(filter *listener.Filter, out proto.Message) error {
 	switch c := filter.ConfigType.(type) {
 	case *listener.Filter_TypedConfig:
+		// nolint: staticcheck
 		if err := ptypes.UnmarshalAny(c.TypedConfig, out); err != nil {
 			return err
 		}
@@ -2602,7 +2603,7 @@ func TestAppendListenerFallthroughRouteForCompleteListener(t *testing.T) {
 			filter := tests[idx].listener.DefaultFilterChain.Filters[0]
 			var tcpProxy tcp.TcpProxy
 			cfg := filter.GetTypedConfig()
-			_ = ptypes.UnmarshalAny(cfg, &tcpProxy)
+			_ = cfg.UnmarshalTo(&tcpProxy)
 			if tcpProxy.StatPrefix != tests[idx].hostname {
 				t.Errorf("Expected stat prefix %s but got %s\n", tests[idx].hostname, tcpProxy.StatPrefix)
 			}

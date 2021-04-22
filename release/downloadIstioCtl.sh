@@ -41,7 +41,7 @@ fi
 
 if [ "x${ISTIO_VERSION}" = "x" ] ; then
   printf "Unable to get latest Istio version. Set ISTIO_VERSION env var and re-run. For example: export ISTIO_VERSION=1.0.4"
-  exit;
+  exit 1;
 fi
 
 LOCAL_ARCH=$(uname -m)
@@ -86,6 +86,10 @@ ARCH_URL="https://github.com/istio/istio/releases/download/${ISTIO_VERSION}/isti
 
 with_arch() {
   printf "\nDownloading %s from %s ...\n" "${NAME}" "$ARCH_URL"
+  if ! curl -o /dev/null -sIf "$ARCH_URL"; then
+    printf "\n%s is not found, please specify a valid ISTIO_VERSION and TARGET_ARCH\n" "$ARCH_URL"
+    exit 1
+  fi
   curl -fsLO "$ARCH_URL"
   filename="istioctl-${ISTIO_VERSION}-${OSEXT}-${ISTIO_ARCH}.tar.gz"
   tar -xzf "${filename}"
@@ -93,13 +97,17 @@ with_arch() {
 
 without_arch() {
   printf "\n Downloading %s from %s ... \n" "${NAME}" "${URL}"
+  if ! curl -o /dev/null -sIf "$URL"; then
+    printf "\n%s is not found, please specify a valid ISTIO_VERSION\n" "$URL"
+    exit 1
+  fi
   curl -fsLO "$URL"
   filename="istioctl-${ISTIO_VERSION}-${OSEXT}.tar.gz"
   tar -xzf "${filename}"
 }
 
 # Istio 1.6 and above support arch
-ARCH_SUPPORTED=$(echo "$ISTIO_VERSION" | awk  '{ ARCH_SUPPORTED=substr($0, 1, 3); print ARCH_SUPPORTED; }' )
+ARCH_SUPPORTED=$(echo "$ISTIO_VERSION" | awk -F'.' '{print $1"."$2}' )
 # Istio 1.5 and below do not have arch support
 ARCH_UNSUPPORTED="1.5"
 

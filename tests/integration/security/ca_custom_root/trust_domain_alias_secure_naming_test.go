@@ -28,16 +28,16 @@ import (
 const (
 	HTTPS  = "https"
 	POLICY = `
-apiVersion: "security.istio.io/v1beta1"
-kind: "PeerAuthentication"
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
 metadata:
   name: "mtls"
 spec:
   mtls:
     mode: STRICT
 ---
-apiVersion: "networking.istio.io/v1alpha3"
-kind: "DestinationRule"
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
 metadata:
   name: "server-naked"
 spec:
@@ -67,7 +67,7 @@ func TestTrustDomainAliasSecureNaming(t *testing.T) {
 	framework.NewTest(t).
 		Features("security.peer.trust-domain-alias-secure-naming").
 		Run(func(t framework.TestContext) {
-			// TODO: remove the skip when https://github.com/istio/istio/issues/28798 is fixed
+			// TODO: https://github.com/istio/istio/issues/32292
 			if t.Clusters().IsMulticluster() {
 				t.Skip()
 			}

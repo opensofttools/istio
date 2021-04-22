@@ -15,6 +15,8 @@
 package option
 
 import (
+	"strings"
+
 	"github.com/gogo/protobuf/types"
 
 	meshAPI "istio.io/api/mesh/v1alpha1"
@@ -55,6 +57,15 @@ func Cluster(value string) Instance {
 
 func NodeID(value string) Instance {
 	return newOption("nodeID", value)
+}
+
+func NodeType(value string) Instance {
+	ntype := strings.Split(value, "~")[0]
+	return newOption("nodeType", ntype)
+}
+
+func XdsType(value string) Instance {
+	return newOption("xds_type", value)
 }
 
 func Region(value string) Instance {
