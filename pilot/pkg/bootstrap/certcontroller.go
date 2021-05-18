@@ -28,7 +28,10 @@ import (
 	"istio.io/istio/pilot/pkg/features"
 	"istio.io/istio/pilot/pkg/keycertbundle"
 	"istio.io/istio/pilot/pkg/serviceregistry/kube/controller"
+	"istio.io/istio/pkg/config/constants"
+	"istio.io/istio/pkg/security"
 	"istio.io/istio/security/pkg/k8s/chiron"
+	"istio.io/istio/security/pkg/pki/ca"
 	"istio.io/pkg/log"
 )
 
@@ -43,11 +46,6 @@ const (
 	// Default CA certificate path
 	// Currently, custom CA path is not supported; no API to get custom CA cert yet.
 	defaultCACertPath = "./var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-)
-
-var (
-	KubernetesCAProvider = "kubernetes"
-	IstiodCAProvider     = "istiod"
 )
 
 // CertController can create certificates signed by K8S server.
@@ -131,7 +129,7 @@ func (s *Server) initDNSCerts(hostname, customHost, namespace string) error {
 
 	var certChain, keyPEM, caBundle []byte
 	var err error
-	if features.PilotCertProvider.Get() == KubernetesCAProvider {
+	if features.PilotCertProvider.Get() == constants.CertProviderKubernetes {
 		log.Infof("Generating K8S-signed cert for %v", names)
 		certChain, keyPEM, _, err = chiron.GenKeyCertK8sCA(s.kubeClient.CertificatesV1beta1().CertificateSigningRequests(),
 			strings.Join(names, ","), hostnamePrefix+".csr.secret", namespace, defaultCACertPath)
@@ -142,14 +140,14 @@ func (s *Server) initDNSCerts(hostname, customHost, namespace string) error {
 		if err != nil {
 			return fmt.Errorf("failed reading %s: %v", defaultCACertPath, err)
 		}
-	} else if features.PilotCertProvider.Get() == IstiodCAProvider {
+	} else if features.PilotCertProvider.Get() == constants.CertProviderIstiod {
 		certChain, keyPEM, err = s.CA.GenKeyCert(names, SelfSignedCACertTTL.Get(), false)
 		if err != nil {
 			return fmt.Errorf("failed generating istiod key cert %v", err)
 		}
 		log.Infof("Generating istiod-signed cert for %v:\n %s", names, certChain)
 
-		signingKeyFile := path.Join(LocalCertDir.Get(), "ca-key.pem")
+		signingKeyFile := path.Join(LocalCertDir.Get(), ca.CAPrivateKeyFile)
 		// check if signing key file exists the cert dir
 		if _, err := os.Stat(signingKeyFile); err != nil {
 			log.Infof("No plugged-in cert at %v; self-signed cert is used", signingKeyFile)
@@ -163,14 +161,19 @@ func (s *Server) initDNSCerts(hostname, customHost, namespace string) error {
 			})
 		} else {
 			log.Infof("Use plugged-in cert at %v", signingKeyFile)
-			caBundle, err = ioutil.ReadFile(path.Join(LocalCertDir.Get(), "root-cert.pem"))
+			caBundle, err = ioutil.ReadFile(path.Join(LocalCertDir.Get(), ca.RootCertFile))
 			if err != nil {
-				return fmt.Errorf("failed reading %s: %v", path.Join(LocalCertDir.Get(), "root-cert.pem"), err)
+				return fmt.Errorf("failed reading %s: %v", path.Join(LocalCertDir.Get(), ca.RootCertFile), err)
 			}
 		}
 	} else {
-		log.Infof("User specified cert provider: %v", features.PilotCertProvider.Get())
-		return nil
+		customCACertPath := security.DefaultRootCertFilePath
+		log.Infof("User specified cert provider: %v, mounted in a well known location %v",
+			features.PilotCertProvider.Get(), customCACertPath)
+		caBundle, err = ioutil.ReadFile(customCACertPath)
+		if err != nil {
+			return fmt.Errorf("failed reading %s: %v", customCACertPath, err)
+		}
 	}
 	s.istiodCertBundleWatcher.SetAndNotify(keyPEM, certChain, caBundle)
 	return nil
@@ -199,67 +202,47 @@ func (s *Server) watchRootCertAndGenKeyCert(names []string, stop <-chan struct{}
 	}
 }
 
-// initCertificateWatches sets up watches for the dns certs.
-// 1. plugin cert
-// 2. istiod signed certs.
+// initCertificateWatches sets up watches for the plugin dns certs.
 func (s *Server) initCertificateWatches(tlsOptions TLSOptions) error {
-	hasPluginCert := hasCustomTLSCerts(tlsOptions)
-	// If there is neither plugin cert nor istiod signed cert, return.
-	if !hasPluginCert && !features.EnableCAServer {
-		return nil
+	if err := s.istiodCertBundleWatcher.SetFromFilesAndNotify(tlsOptions.KeyFile, tlsOptions.CertFile, tlsOptions.CaCertFile); err != nil {
+		return fmt.Errorf("set keyCertBundle failed: %v", err)
 	}
-	if hasPluginCert {
-		if err := s.istiodCertBundleWatcher.SetFromFilesAndNotify(tlsOptions.KeyFile, tlsOptions.CertFile, tlsOptions.CaCertFile); err != nil {
-			return fmt.Errorf("set keyCertBundle failed: %v", err)
+	// TODO: Setup watcher for root and restart server if it changes.
+	for _, file := range []string{tlsOptions.CertFile, tlsOptions.KeyFile} {
+		log.Infof("adding watcher for certificate %s", file)
+		if err := s.fileWatcher.Add(file); err != nil {
+			return fmt.Errorf("could not watch %v: %v", file, err)
 		}
-		// TODO: Setup watcher for root and restart server if it changes.
-		for _, file := range []string{tlsOptions.CertFile, tlsOptions.KeyFile} {
-			log.Infof("adding watcher for certificate %s", file)
-			if err := s.fileWatcher.Add(file); err != nil {
-				return fmt.Errorf("could not watch %v: %v", file, err)
-			}
-		}
-		s.addStartFunc(func(stop <-chan struct{}) error {
-			go func() {
-				var keyCertTimerC <-chan time.Time
-				for {
-					select {
-					case <-keyCertTimerC:
-						keyCertTimerC = nil
-						if err := s.istiodCertBundleWatcher.SetFromFilesAndNotify(tlsOptions.KeyFile, tlsOptions.CertFile, tlsOptions.CaCertFile); err != nil {
-							log.Errorf("Setting keyCertBundle failed: %v", err)
-						}
-					case <-s.fileWatcher.Events(tlsOptions.CertFile):
-						if keyCertTimerC == nil {
-							keyCertTimerC = time.After(watchDebounceDelay)
-						}
-					case <-s.fileWatcher.Events(tlsOptions.KeyFile):
-						if keyCertTimerC == nil {
-							keyCertTimerC = time.After(watchDebounceDelay)
-						}
-					case err := <-s.fileWatcher.Errors(tlsOptions.CertFile):
-						log.Errorf("error watching %v: %v", tlsOptions.CertFile, err)
-					case err := <-s.fileWatcher.Errors(tlsOptions.KeyFile):
-						log.Errorf("error watching %v: %v", tlsOptions.KeyFile, err)
-					case <-stop:
-						return
-					}
-				}
-			}()
-			return nil
-		})
-	}
-
-	neverStop := make(chan struct{})
-	watchCh := s.istiodCertBundleWatcher.AddWatcher()
-	if err := s.loadIstiodCert(watchCh, neverStop); err != nil {
-		return fmt.Errorf("first time loadIstiodCert failed: %v", err)
 	}
 	s.addStartFunc(func(stop <-chan struct{}) error {
-		go s.reloadIstiodCert(watchCh, stop)
+		go func() {
+			var keyCertTimerC <-chan time.Time
+			for {
+				select {
+				case <-keyCertTimerC:
+					keyCertTimerC = nil
+					if err := s.istiodCertBundleWatcher.SetFromFilesAndNotify(tlsOptions.KeyFile, tlsOptions.CertFile, tlsOptions.CaCertFile); err != nil {
+						log.Errorf("Setting keyCertBundle failed: %v", err)
+					}
+				case <-s.fileWatcher.Events(tlsOptions.CertFile):
+					if keyCertTimerC == nil {
+						keyCertTimerC = time.After(watchDebounceDelay)
+					}
+				case <-s.fileWatcher.Events(tlsOptions.KeyFile):
+					if keyCertTimerC == nil {
+						keyCertTimerC = time.After(watchDebounceDelay)
+					}
+				case err := <-s.fileWatcher.Errors(tlsOptions.CertFile):
+					log.Errorf("error watching %v: %v", tlsOptions.CertFile, err)
+				case err := <-s.fileWatcher.Errors(tlsOptions.KeyFile):
+					log.Errorf("error watching %v: %v", tlsOptions.KeyFile, err)
+				case <-stop:
+					return
+				}
+			}
+		}()
 		return nil
 	})
-
 	return nil
 }
 
@@ -295,7 +278,7 @@ func (s *Server) loadIstiodCert(watchCh <-chan keycertbundle.KeyCertBundle, stop
 			return fmt.Errorf("x509 cert - ParseCertificates() error: %v", err)
 		}
 		for _, c := range x509Cert {
-			log.Infof("x509 cert - Issuer: %q, Subject: %q, SN: %x, NotBefore: %q, NotAfter: %q\n",
+			log.Infof("x509 cert - Issuer: %q, Subject: %q, SN: %x, NotBefore: %q, NotAfter: %q",
 				c.Issuer, c.Subject, c.SerialNumber,
 				c.NotBefore.Format(time.RFC3339), c.NotAfter.Format(time.RFC3339))
 		}

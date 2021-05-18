@@ -42,6 +42,7 @@ const (
 
 // TestRequestAuthentication tests beta authn policy for jwt.
 func TestRequestAuthentication(t *testing.T) {
+	t.Skip("https://github.com/istio/istio/issues/32392")
 	payload1 := strings.Split(jwt.TokenIssuer1, ".")[1]
 	payload2 := strings.Split(jwt.TokenIssuer2, ".")[1]
 	framework.NewTest(t).
@@ -296,7 +297,7 @@ func TestRequestAuthentication(t *testing.T) {
 						t.Skip()
 					}
 					echotest.New(t, apps.All).
-						SetupForPair(func(t framework.TestContext, src, dst echo.Instances) error {
+						SetupForDestination(func(t framework.TestContext, dst echo.Instances) error {
 							if c.Config != "" {
 								policy := yml.MustApplyNamespace(t, tmpl.MustEvaluate(
 									file.AsStringOrFail(t, fmt.Sprintf("testdata/requestauthn/%s.yaml.tmpl", c.Config)),
@@ -367,7 +368,7 @@ func TestIngressRequestAuthentication(t *testing.T) {
 				policy := tmpl.EvaluateAllOrFail(t, namespaceTmpl, file.AsStringOrFail(t, filename))
 				t.Config().ApplyYAMLOrFail(t, ns.Name(), policy...)
 			}
-			applyPolicy("testdata/requestauthn/global-jwt.yaml.tmpl", rootNS{})
+			applyPolicy("testdata/requestauthn/global-jwt.yaml.tmpl", newRootNS(t))
 
 			callCount := 1
 			if t.Clusters().IsMulticluster() {
@@ -402,7 +403,7 @@ func TestIngressRequestAuthentication(t *testing.T) {
 				}
 				for _, c := range testCases {
 					echotest.New(t, apps.All).
-						SetupForPair(func(t framework.TestContext, src, dst echo.Instances) error {
+						SetupForDestination(func(t framework.TestContext, dst echo.Instances) error {
 							policy := yml.MustApplyNamespace(t, tmpl.MustEvaluate(
 								file.AsStringOrFail(t, "testdata/requestauthn/ingress.yaml.tmpl"),
 								map[string]string{
