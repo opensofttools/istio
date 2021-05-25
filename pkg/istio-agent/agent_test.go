@@ -333,16 +333,16 @@ func TestAgent(t *testing.T) {
 
 		a.Check(security.WorkloadKeyCertResourceName, security.RootCertReqResourceName)
 	})
+	envoyReady := func(t test.Failer, name string, port int) {
+		retry.UntilSuccessOrFail(t, func() error {
+			code, _, _ := env.HTTPGet(fmt.Sprintf("http://localhost:%d/ready", port))
+			if code != 200 {
+				return fmt.Errorf("envoy %q is not ready", name)
+			}
+			return nil
+		}, retry.Delay(time.Millisecond*100), retry.Timeout(time.Second*15))
+	}
 	t.Run("Envoy lifecycle", func(t *testing.T) {
-		envoyReady := func(name string, port int) {
-			retry.UntilSuccessOrFail(t, func() error {
-				code, _, _ := env.HTTPGet(fmt.Sprintf("http://localhost:%d/ready", port))
-				if code != 200 {
-					return fmt.Errorf("envoy %q is not ready", name)
-				}
-				return nil
-			}, retry.Delay(time.Millisecond*100), retry.Timeout(time.Second*15))
-		}
 		Setup(t, func(a AgentTest) AgentTest {
 			a.envoyEnable = true
 			a.ProxyConfig.StatusPort = 15020
@@ -352,7 +352,7 @@ func TestAgent(t *testing.T) {
 			a.AgentConfig.ProxyXDSDebugViaAgent = false // uses a fixed port
 			return a
 		}).Check(security.WorkloadKeyCertResourceName, security.RootCertReqResourceName)
-		envoyReady("first agent", 15000)
+		envoyReady(t, "first agent", 15000)
 		Setup(t, func(a AgentTest) AgentTest {
 			a.envoyEnable = true
 			a.ProxyConfig.StatusPort = 25020
@@ -362,7 +362,19 @@ func TestAgent(t *testing.T) {
 			a.AgentConfig.ProxyXDSDebugViaAgent = false // uses a fixed port
 			return a
 		}).Check(security.WorkloadKeyCertResourceName, security.RootCertReqResourceName)
-		envoyReady("second agent", 25000)
+		envoyReady(t, "second agent", 25000)
+	})
+	t.Run("Envoy bootstrap discovery", func(t *testing.T) {
+		Setup(t, func(a AgentTest) AgentTest {
+			a.envoyEnable = true
+			a.ProxyConfig.StatusPort = 15020
+			a.ProxyConfig.ProxyAdminPort = 15000
+			a.AgentConfig.EnvoyPrometheusPort = 15090
+			a.AgentConfig.EnvoyStatusPort = 15021
+			a.AgentConfig.EnableDynamicBootstrap = true
+			return a
+		}).Check(security.WorkloadKeyCertResourceName, security.RootCertReqResourceName)
+		envoyReady(t, "bootstrap discovery", 15000)
 	})
 }
 
