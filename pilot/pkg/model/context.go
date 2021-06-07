@@ -641,10 +641,16 @@ func (node *Proxy) GetNetworkView() map[string]bool {
 // InNetwork returns true if the proxy is on the given network, or if either
 // the proxy's network or the given network is unspecified ("").
 func (node *Proxy) InNetwork(network string) bool {
-	return node == nil || IsSameNetwork(network, node.Metadata.Network)
+	return node == nil || SameOrEmpty(network, node.Metadata.Network)
 }
 
-func IsSameNetwork(a, b string) bool {
+// InCluster returns true if the proxy is in the given cluster, or if either
+// the proxy's cluster id or the given cluster id is unspecified ("").
+func (node *Proxy) InCluster(cluster string) bool {
+	return node == nil || SameOrEmpty(cluster, node.Metadata.ClusterID)
+}
+
+func SameOrEmpty(a, b string) bool {
 	return a == UnnamedNetwork || b == UnnamedNetwork || a == b
 }
 
@@ -760,26 +766,6 @@ func (node *Proxy) ServiceNode() string {
 	}, serviceNodeSeparator)
 }
 
-// RouterMode decides the behavior of Istio Gateway (normal or sni-dnat)
-type RouterMode string
-
-const (
-	// StandardRouter is the normal gateway mode
-	StandardRouter RouterMode = "standard"
-
-	// SniDnatRouter is used for bridging two networks
-	SniDnatRouter RouterMode = "sni-dnat"
-)
-
-// GetRouterMode returns the operating mode associated with the router.
-// Assumes that the proxy is of type Router
-func (node *Proxy) GetRouterMode() RouterMode {
-	if RouterMode(node.Metadata.RouterMode) == SniDnatRouter {
-		return SniDnatRouter
-	}
-	return StandardRouter
-}
-
 // SetSidecarScope identifies the sidecar scope object associated with this
 // proxy and updates the proxy Node. This is a convenience hack so that
 // callers can simply call push.Services(node) while the implementation of
@@ -807,6 +793,7 @@ func (node *Proxy) SetSidecarScope(ps *PushContext) {
 // proxy and caches the merged object in the proxy Node. This is a convenience hack so that
 // callers can simply call push.MergedGateways(node) instead of having to
 // fetch all the gateways and invoke the merge call in multiple places (lds/rds).
+// Must be called after ServiceInstances are set
 func (node *Proxy) SetGatewaysForProxy(ps *PushContext) {
 	if node.Type != Router {
 		return

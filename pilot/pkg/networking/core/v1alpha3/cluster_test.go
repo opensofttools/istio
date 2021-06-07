@@ -582,7 +582,7 @@ func buildSniTestClustersForSidecar(t *testing.T, sniValue string) []*cluster.Cl
 }
 
 func buildSniDnatTestClustersForGateway(t *testing.T, sniValue string) []*cluster.Cluster {
-	return buildSniTestClustersWithMetadata(t, sniValue, model.Router, &model.NodeMetadata{RouterMode: string(model.SniDnatRouter)})
+	return buildSniTestClustersWithMetadata(t, sniValue, model.Router, &model.NodeMetadata{})
 }
 
 func buildSniTestClustersWithMetadata(t testing.TB, sniValue string, typ model.NodeType, meta *model.NodeMetadata) []*cluster.Cluster {
@@ -836,7 +836,7 @@ func TestBuildAutoMtlsSettings(t *testing.T) {
 				SubjectAltNames:   []string{"custom.foo.com"},
 				Sni:               "custom.foo.com",
 			},
-			autoDetected,
+			userSupplied,
 		},
 		{
 			"Auto fill nil settings when mTLS nil for internal service in strict mode",
@@ -906,7 +906,6 @@ func TestBuildAutoMtlsSettings(t *testing.T) {
 			nil,
 			userSupplied,
 		},
-
 		{
 			"TLS nil auto build tls with metadata cert path",
 			nil,
@@ -1314,7 +1313,7 @@ func TestGatewayLocalityLB(t *testing.T) {
 					},
 				},
 			},
-			meta: &model.NodeMetadata{RouterMode: string(model.SniDnatRouter)},
+			meta: &model.NodeMetadata{},
 		}))
 
 	if c.CommonLbConfig == nil {
@@ -1356,7 +1355,7 @@ func TestGatewayLocalityLB(t *testing.T) {
 					},
 				},
 			}, // peerAuthn
-			meta: &model.NodeMetadata{RouterMode: string(model.SniDnatRouter)},
+			meta: &model.NodeMetadata{},
 		}))
 
 	if c.CommonLbConfig == nil {

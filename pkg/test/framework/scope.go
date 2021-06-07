@@ -180,20 +180,23 @@ func (s *scope) skipDumping() {
 	s.skipDump = true
 }
 
-func (s *scope) dump(ctx resource.Context) {
+func (s *scope) dump(ctx resource.Context, recursive bool) {
 	s.mu.Lock()
-	if s.skipDump {
+	skip := s.skipDump
+	s.mu.Unlock()
+	if skip {
 		return
 	}
-	s.mu.Unlock()
 	st := time.Now()
 	defer func() {
 		scopes.Framework.Debugf("Done dumping scope: %s (%v)", s.id, time.Since(st))
 	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, c := range s.children {
-		c.dump(ctx)
+	if recursive {
+		for _, c := range s.children {
+			c.dump(ctx, recursive)
+		}
 	}
 	wg := sync.WaitGroup{}
 	for _, c := range s.resources {
