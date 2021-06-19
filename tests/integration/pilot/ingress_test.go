@@ -216,13 +216,18 @@ func TestIngress(t *testing.T) {
 				ingressutil.DeleteKubeSecret(t, []string{credName2})
 			})
 
-			ingressClassConfig := `
-apiVersion: networking.k8s.io/v1beta1
+			apiVersion := "v1beta1"
+			if t.Clusters().Default().MinKubeVersion(19) {
+				apiVersion = "v1"
+			}
+
+			ingressClassConfig := fmt.Sprintf(`
+apiVersion: networking.k8s.io/%s
 kind: IngressClass
 metadata:
   name: istio-test
 spec:
-  controller: istio.io/ingress-controller`
+  controller: istio.io/ingress-controller`, apiVersion)
 
 			ingressConfigTemplate := `
 apiVersion: networking.k8s.io/v1beta1
@@ -247,6 +252,38 @@ spec:
             backend:
               serviceName: b
               servicePort: 80`
+			if apiVersion == "v1" {
+				ingressConfigTemplate = `
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: %s
+spec:
+  ingressClassName: %s
+  tls:
+  - hosts: ["foo.example.com"]
+    secretName: k8s-ingress-secret-foo
+  - hosts: ["bar.example.com"]
+    secretName: k8s-ingress-secret-bar
+  rules:
+  - http:
+      paths:
+      - backend:
+          service:
+            name: b
+            port:
+              name: http
+        path: %s/namedport
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: b
+            port:
+              number: 80
+        path: %s
+        pathType: ImplementationSpecific
+`
+			}
 
 			if err := t.Config().ApplyYAML(apps.Namespace.Name(), ingressClassConfig,
 				fmt.Sprintf(ingressConfigTemplate, "ingress", "istio-test", "/test", "/test")); err != nil {
@@ -333,7 +370,24 @@ spec:
 				host, _ := apps.Ingress.HTTPAddress()
 				hostIsIP := net.ParseIP(host).String() != "<nil>"
 				retry.UntilSuccessOrFail(t, func() error {
-					ing, err := t.Clusters().Default().NetworkingV1beta1().Ingresses(apps.Namespace.Name()).Get(context.Background(), "ingress", metav1.GetOptions{})
+					if apiVersion == "v1beta1" {
+						ing, err := t.Clusters().Default().NetworkingV1beta1().Ingresses(apps.Namespace.Name()).Get(context.Background(), "ingress", metav1.GetOptions{})
+						if err != nil {
+							return err
+						}
+						if len(ing.Status.LoadBalancer.Ingress) < 1 {
+							return fmt.Errorf("unexpected ingress status, ingress is empty")
+						}
+						got := ing.Status.LoadBalancer.Ingress[0].Hostname
+						if hostIsIP {
+							got = ing.Status.LoadBalancer.Ingress[0].IP
+						}
+						if got != host {
+							return fmt.Errorf("unexpected ingress status, got %+v want %v", got, host)
+						}
+						return nil
+					}
+					ing, err := t.Clusters().Default().NetworkingV1().Ingresses(apps.Namespace.Name()).Get(context.Background(), "ingress", metav1.GetOptions{})
 					if err != nil {
 						return err
 					}
@@ -429,10 +483,9 @@ func TestCustomGateway(t *testing.T) {
 		NewTest(t).
 		Features("traffic.ingress.custom").
 		Run(func(t framework.TestContext) {
-			gatewayNs := namespace.NewOrFail(t, t, namespace.Config{Prefix: "custom-gateway"})
 			injectLabel := `sidecar.istio.io/inject: "true"`
-			if len(t.Settings().Revision) > 0 {
-				injectLabel = fmt.Sprintf(`istio.io/rev: "%v"`, t.Settings().Revision)
+			if t.Settings().Revisions.Default() != "" {
+				injectLabel = fmt.Sprintf(`istio.io/rev: "%v"`, t.Settings().Revisions.Default())
 			}
 
 			templateParams := map[string]string{
@@ -442,7 +495,8 @@ func TestCustomGateway(t *testing.T) {
 			}
 
 			t.NewSubTest("minimal").Run(func(t framework.TestContext) {
-				t.Config().ApplyYAMLOrFail(t, gatewayNs.Name(), tmpl.MustEvaluate(`apiVersion: v1
+				gatewayNs := namespace.NewOrFail(t, t, namespace.Config{Prefix: "custom-gateway-minimal"})
+				_ = t.Config().ApplyYAMLNoCleanup(gatewayNs.Name(), tmpl.MustEvaluate(`apiVersion: v1
 kind: Service
 metadata:
   name: custom-gateway
@@ -525,10 +579,11 @@ spec:
 			// TODO we could add istioctl as well, but the framework adds a bunch of stuff beyond just `istioctl install`
 			// that mess with certs, multicluster, etc
 			t.NewSubTest("helm").Run(func(t framework.TestContext) {
+				gatewayNs := namespace.NewOrFail(t, t, namespace.Config{Prefix: "custom-gateway-helm"})
 				d := filepath.Join(t.TempDir(), "gateway-values.yaml")
 				rev := ""
-				if len(t.Settings().Revision) > 0 {
-					rev = t.Settings().Revision
+				if t.Settings().Revisions.Default() != "" {
+					rev = t.Settings().Revisions.Default()
 				}
 				ioutil.WriteFile(d, []byte(fmt.Sprintf(`
 revision: %v
@@ -556,7 +611,7 @@ gateways:
 					_, err := kubetest.CheckPodsAreReady(kubetest.NewPodFetch(cs, gatewayNs.Name(), "istio=custom-gateway-helm"))
 					return err
 				}, retry.Timeout(time.Minute*2))
-				t.Config().ApplyYAMLOrFail(t, gatewayNs.Name(), fmt.Sprintf(`apiVersion: networking.istio.io/v1alpha3
+				_ = t.Config().ApplyYAMLNoCleanup(gatewayNs.Name(), fmt.Sprintf(`apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
   name: app
