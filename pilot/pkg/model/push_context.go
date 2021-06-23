@@ -17,7 +17,6 @@ package model
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -203,19 +202,10 @@ type PushContext struct {
 
 	// cache gateways addresses for each network
 	// this is mainly used for kubernetes multi-cluster scenario
-	networksMu      sync.RWMutex
-	networkGateways map[string][]*Gateway
+	networkGateways *NetworkGateways
 
 	initDone        atomic.Bool
 	initializeMutex sync.Mutex
-}
-
-// Gateway is the gateway of a network
-type Gateway struct {
-	// gateway ip address
-	Addr string
-	// gateway port
-	Port uint32
 }
 
 type processedDestRules struct {
@@ -1612,7 +1602,23 @@ func (ps *PushContext) initEnvoyFilters(env *Environment) error {
 		return err
 	}
 
-	sortConfigByCreationTime(envoyFilterConfigs)
+	sort.SliceStable(envoyFilterConfigs, func(i, j int) bool {
+		ifilter := envoyFilterConfigs[i].Spec.(*networking.EnvoyFilter)
+		jfilter := envoyFilterConfigs[j].Spec.(*networking.EnvoyFilter)
+		if ifilter.Priority != jfilter.Priority {
+			return ifilter.Priority < jfilter.Priority
+		}
+		// If prirority is same fallback to name and creation timestamp, else use prirority.
+		// If creation time is the same, then behavior is nondeterministic. In this case, we can
+		// pick an arbitrary but consistent ordering based on name and namespace, which is unique.
+		// CreationTimestamp is stored in seconds, so this is not uncommon.
+		if envoyFilterConfigs[i].CreationTimestamp != envoyFilterConfigs[j].CreationTimestamp {
+			return envoyFilterConfigs[i].CreationTimestamp.Before(envoyFilterConfigs[j].CreationTimestamp)
+		}
+		in := envoyFilterConfigs[i].Name + "." + envoyFilterConfigs[i].Namespace
+		jn := envoyFilterConfigs[j].Name + "." + envoyFilterConfigs[j].Namespace
+		return in < jn
+	})
 
 	ps.envoyFiltersByNamespace = make(map[string][]*EnvoyFilterWrapper)
 	for _, envoyFilterConfig := range envoyFilterConfigs {
@@ -1865,46 +1871,11 @@ func instancesEmpty(m map[int][]*ServiceInstance) bool {
 
 // pre computes gateways for each network
 func (ps *PushContext) initMeshNetworks(env *Environment) {
-	ps.networksMu.Lock()
-	defer ps.networksMu.Unlock()
-	ps.networkGateways = map[string][]*Gateway{}
-
-	// First, use addresses directly specified in meshNetworks
-	meshNetworks := env.Networks()
-	if meshNetworks != nil {
-		for network, networkConf := range meshNetworks.Networks {
-			gws := networkConf.Gateways
-			for _, gw := range gws {
-				if gwIP := net.ParseIP(gw.GetAddress()); gwIP != nil {
-					ps.networkGateways[network] = append(ps.networkGateways[network], &Gateway{gw.GetAddress(), gw.Port})
-				}
-			}
-
-		}
-	}
-
-	// Second, load registry specific gateways.
-	for network, gateways := range env.NetworkGateways() {
-		// - the internal map of label gateways - these get deleted if the service is deleted, updated if the ip changes etc.
-		// - the computed map from meshNetworks (triggered by reloadNetworkLookup, the ported logic from getGatewayAddresses)
-		ps.networkGateways[network] = append(ps.networkGateways[network], gateways...)
-	}
+	ps.networkGateways = newNetworkGateways(env)
 }
 
-func (ps *PushContext) NetworkGateways() map[string][]*Gateway {
-	ps.networksMu.RLock()
-	defer ps.networksMu.RUnlock()
+func (ps *PushContext) NetworkGateways() *NetworkGateways {
 	return ps.networkGateways
-}
-
-func (ps *PushContext) NetworkGatewaysByNetwork(network string) []*Gateway {
-	ps.networksMu.RLock()
-	defer ps.networksMu.RUnlock()
-	if ps.networkGateways != nil {
-		return ps.networkGateways[network]
-	}
-
-	return nil
 }
 
 // BestEffortInferServiceMTLSMode infers the mTLS mode for the service + port from all authentication
