@@ -34,6 +34,7 @@ import (
 
 	"istio.io/api/label"
 	"istio.io/istio/pilot/pkg/networking"
+	"istio.io/istio/pilot/pkg/serviceregistry/provider"
 	"istio.io/istio/pilot/pkg/util/sets"
 	"istio.io/istio/pkg/cluster"
 	"istio.io/istio/pkg/config/constants"
@@ -282,7 +283,7 @@ func WorkloadInstancesEqual(first, second *WorkloadInstance) bool {
 	if first.Endpoint.Locality != second.Endpoint.Locality {
 		return false
 	}
-	if first.Endpoint.LbWeight != second.Endpoint.LbWeight {
+	if first.Endpoint.GetLoadBalancingWeight() != second.Endpoint.GetLoadBalancingWeight() {
 		return false
 	}
 	if first.Namespace != second.Namespace {
@@ -419,6 +420,14 @@ type IstioEndpoint struct {
 	DiscoverabilityPolicy EndpointDiscoverabilityPolicy `json:"-"`
 }
 
+// GetLoadBalancingWeight returns the weight for this endpoint, normalized to always be > 0.
+func (ep *IstioEndpoint) GetLoadBalancingWeight() uint32 {
+	if ep.LbWeight > 0 {
+		return ep.LbWeight
+	}
+	return 1
+}
+
 // IsDiscoverableFromProxy indicates whether or not this endpoint is discoverable from the given Proxy.
 func (ep *IstioEndpoint) IsDiscoverableFromProxy(p *Proxy) bool {
 	if ep == nil || ep.DiscoverabilityPolicy == nil {
@@ -447,7 +456,7 @@ type ServiceAttributes struct {
 	// ServiceRegistry indicates the backing service registry system where this service
 	// was sourced from.
 	// TODO: move the ServiceRegistry type from platform.go to model
-	ServiceRegistry string
+	ServiceRegistry provider.ID
 	// Name is "destination.service.name" attribute
 	Name string
 	// Namespace is "destination.service.namespace" attribute

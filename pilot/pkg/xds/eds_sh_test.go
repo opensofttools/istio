@@ -15,6 +15,7 @@ package xds_test
 
 import (
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"istio.io/istio/pilot/pkg/serviceregistry"
 	"istio.io/istio/pilot/pkg/serviceregistry/aggregate"
 	"istio.io/istio/pilot/pkg/serviceregistry/memory"
+	"istio.io/istio/pilot/pkg/serviceregistry/provider"
 	"istio.io/istio/pilot/pkg/xds"
 	v3 "istio.io/istio/pilot/pkg/xds/v3"
 	"istio.io/istio/pilot/test/xdstest"
@@ -41,6 +43,15 @@ import (
 
 type expectedResults struct {
 	weights map[string]uint32
+}
+
+func (r expectedResults) getAddrs() []string {
+	var out []string
+	for addr := range r.weights {
+		out = append(out, addr)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // The test will setup 3 networks with various number of endpoints for the same service within
@@ -81,14 +92,21 @@ func TestSplitHorizonEds(t *testing.T) {
 			sidecarID: sidecarID("10.1.0.1", "app3"),
 			want: expectedResults{
 				weights: map[string]uint32{
-					"10.1.0.1":      2,
+					// 1 local endpoint
+					"10.1.0.1": 2,
+
+					// 2 endopints on network 2, go through single gateway.
 					"159.122.219.2": 4,
+
+					// 3 endpoints on network 3, weights split across 2 gateways.
 					"159.122.219.3": 3,
 					"179.114.119.3": 3,
-					"10.4.0.1":      2,
-					"10.4.0.2":      2,
-					"10.4.0.3":      2,
-					"10.4.0.4":      2,
+
+					// no gateway defined for network 4 - treat as directly reachable.
+					"10.4.0.1": 2,
+					"10.4.0.2": 2,
+					"10.4.0.3": 2,
+					"10.4.0.4": 2,
 				},
 			},
 		},
@@ -99,15 +117,22 @@ func TestSplitHorizonEds(t *testing.T) {
 			sidecarID: sidecarID("10.2.0.1", "app3"),
 			want: expectedResults{
 				weights: map[string]uint32{
-					"10.2.0.1":      2,
-					"10.2.0.2":      2,
+					// 2 local endpoints
+					"10.2.0.1": 2,
+					"10.2.0.2": 2,
+
+					// 1 endpoint on network 1, accessed via gateway.
 					"159.122.219.1": 2,
+
+					// 3 endpoints on network 3, weights split across 2 gateways.
 					"159.122.219.3": 3,
 					"179.114.119.3": 3,
-					"10.4.0.1":      2,
-					"10.4.0.2":      2,
-					"10.4.0.3":      2,
-					"10.4.0.4":      2,
+
+					// no gateway defined for network 4 - treat as directly reachable.
+					"10.4.0.1": 2,
+					"10.4.0.2": 2,
+					"10.4.0.3": 2,
+					"10.4.0.4": 2,
 				},
 			},
 		},
@@ -118,15 +143,22 @@ func TestSplitHorizonEds(t *testing.T) {
 			sidecarID: sidecarID("10.3.0.1", "app3"),
 			want: expectedResults{
 				weights: map[string]uint32{
+					// 3 local endpoints.
+					"10.3.0.1": 2,
+					"10.3.0.2": 2,
+					"10.3.0.3": 2,
+
+					// 1 endpoint on network 1, accessed via gateway.
 					"159.122.219.1": 2,
+
+					// 2 endpoint on network 2, accessed via gateway.
 					"159.122.219.2": 4,
-					"10.3.0.1":      2,
-					"10.3.0.2":      2,
-					"10.3.0.3":      2,
-					"10.4.0.1":      2,
-					"10.4.0.2":      2,
-					"10.4.0.3":      2,
-					"10.4.0.4":      2,
+
+					// no gateway defined for network 4 - treat as directly reachable.
+					"10.4.0.1": 2,
+					"10.4.0.2": 2,
+					"10.4.0.3": 2,
+					"10.4.0.4": 2,
 				},
 			},
 		},
@@ -137,12 +169,19 @@ func TestSplitHorizonEds(t *testing.T) {
 			sidecarID: sidecarID("10.4.0.1", "app3"),
 			want: expectedResults{
 				weights: map[string]uint32{
-					"10.4.0.1":      2,
-					"10.4.0.2":      2,
-					"10.4.0.3":      2,
-					"10.4.0.4":      2,
+					// 4 local endpoints.
+					"10.4.0.1": 2,
+					"10.4.0.2": 2,
+					"10.4.0.3": 2,
+					"10.4.0.4": 2,
+
+					// 1 endpoint on network 1, accessed via gateway.
 					"159.122.219.1": 2,
+
+					// 2 endpoint on network 2, accessed via gateway.
 					"159.122.219.2": 4,
+
+					// 3 endpoints on network 3, weights split across 2 gateways.
 					"159.122.219.3": 3,
 					"179.114.119.3": 3,
 				},
@@ -150,7 +189,7 @@ func TestSplitHorizonEds(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.network, func(t *testing.T) {
+		t.Run("from "+tt.network, func(t *testing.T) {
 			verifySplitHorizonResponse(t, s, tt.network, tt.sidecarID, tt.want)
 		})
 	}
@@ -166,7 +205,7 @@ func verifySplitHorizonResponse(t *testing.T, s *xds.FakeDiscoveryServer, networ
 		"NETWORK":       {Kind: &structpb.Value_StringValue{StringValue: network}},
 	}}
 
-	ads.RequestResponseAck(&discovery.DiscoveryRequest{
+	ads.RequestResponseAck(t, &discovery.DiscoveryRequest{
 		Node: &core.Node{
 			Id:       ads.ID,
 			Metadata: metadata,
@@ -175,7 +214,7 @@ func verifySplitHorizonResponse(t *testing.T, s *xds.FakeDiscoveryServer, networ
 	})
 
 	clusterName := "outbound|1080||service5.default.svc.cluster.local"
-	res := ads.RequestResponseAck(&discovery.DiscoveryRequest{
+	res := ads.RequestResponseAck(t, &discovery.DiscoveryRequest{
 		Node: &core.Node{
 			Id:       ads.ID,
 			Metadata: metadata,
@@ -187,12 +226,12 @@ func verifySplitHorizonResponse(t *testing.T, s *xds.FakeDiscoveryServer, networ
 	eps := cla.Endpoints
 
 	if len(eps) != 1 {
-		t.Fatal(fmt.Errorf("expecting 1 locality endpoint but got %d", len(eps)))
+		t.Fatalf("expecting 1 locality endpoint but got %d", len(eps))
 	}
 
 	lbEndpoints := eps[0].LbEndpoints
 	if len(lbEndpoints) != len(expected.weights) {
-		t.Fatal(fmt.Errorf("number of endpoints should be %d but got %d", len(expected.weights), len(lbEndpoints)))
+		t.Fatalf("unexpected number of endpoints.\nWant:\n%v\nGot:\n%v", expected.getAddrs(), getLbEndpointAddrs(lbEndpoints))
 	}
 
 	for addr, weight := range expected.weights {
@@ -204,10 +243,10 @@ func verifySplitHorizonResponse(t *testing.T, s *xds.FakeDiscoveryServer, networ
 			}
 		}
 		if match == nil {
-			t.Fatal(fmt.Errorf("couldn't find endpoint with address %s", addr))
+			t.Fatalf("couldn't find endpoint with address %s: found %v", addr, getLbEndpointAddrs(lbEndpoints))
 		}
 		if match.LoadBalancingWeight.Value != weight {
-			t.Fatal(fmt.Errorf("weight for endpoint %s is expected to be %d but got %d", addr, weight, match.LoadBalancingWeight.Value))
+			t.Errorf("weight for endpoint %s is expected to be %d but got %d", addr, weight, match.LoadBalancingWeight.Value)
 		}
 	}
 }
@@ -215,15 +254,15 @@ func verifySplitHorizonResponse(t *testing.T, s *xds.FakeDiscoveryServer, networ
 // initRegistry creates and initializes a memory registry that holds a single
 // service with the provided amount of endpoints. It also creates a service for
 // the ingress with the provided external IP
-func initRegistry(server *xds.FakeDiscoveryServer, clusterNum int, gatewaysIP []string, numOfEndpoints int) {
-	clusterID := cluster.ID(fmt.Sprintf("cluster%d", clusterNum))
-	networkID := network.ID(fmt.Sprintf("network%d", clusterNum))
+func initRegistry(server *xds.FakeDiscoveryServer, networkNum int, gatewaysIP []string, numOfEndpoints int) {
+	clusterID := cluster.ID(fmt.Sprintf("cluster%d", networkNum))
+	networkID := network.ID(fmt.Sprintf("network%d", networkNum))
 	memRegistry := memory.NewServiceDiscovery(nil)
 	memRegistry.EDSUpdater = server.Discovery
 
 	server.Env().ServiceDiscovery.(*aggregate.Controller).AddRegistry(serviceregistry.Simple{
 		ClusterID:        clusterID,
-		ProviderID:       serviceregistry.Mock,
+		ProviderID:       provider.Mock,
 		ServiceDiscovery: memRegistry,
 		Controller:       &memory.ServiceController{},
 	})
@@ -271,13 +310,15 @@ func initRegistry(server *xds.FakeDiscoveryServer, clusterNum int, gatewaysIP []
 	})
 	istioEndpoints := make([]*model.IstioEndpoint, numOfEndpoints)
 	for i := 0; i < numOfEndpoints; i++ {
+		addr := fmt.Sprintf("10.%d.0.%d", networkNum, i+1)
 		istioEndpoints[i] = &model.IstioEndpoint{
-			Address:         fmt.Sprintf("10.%d.0.%d", clusterNum, i+1),
+			Address:         addr,
 			EndpointPort:    2080,
 			ServicePortName: "http-main",
 			Network:         networkID,
 			Locality: model.Locality{
-				Label: "az",
+				Label:     "az",
+				ClusterID: clusterID,
 			},
 			Labels:  svcLabels,
 			TLSMode: model.IstioMutualTLSModeLabel,
@@ -295,4 +336,13 @@ func addNetwork(server *xds.FakeDiscoveryServer, id network.ID, network *meshcon
 	c[string(id)] = network
 	meshNetworks.Networks = c
 	server.Env().SetNetworks(&meshNetworks)
+}
+
+func getLbEndpointAddrs(eps []*endpoint.LbEndpoint) []string {
+	addrs := make([]string, 0)
+	for _, lbEp := range eps {
+		addrs = append(addrs, lbEp.GetEndpoint().Address.GetSocketAddress().Address)
+	}
+	sort.Strings(addrs)
+	return addrs
 }

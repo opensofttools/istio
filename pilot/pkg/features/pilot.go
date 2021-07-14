@@ -80,7 +80,7 @@ var (
 		"PILOT_DEBOUNCE_AFTER",
 		100*time.Millisecond,
 		"The delay added to config/registry events for debouncing. This will delay the push by "+
-			"at least this internal. If no change is detected within this period, the push will happen, "+
+			"at least this interval. If no change is detected within this period, the push will happen, "+
 			" otherwise we'll keep delaying until things settle, up to a max of PILOT_DEBOUNCE_MAX.",
 	).Get()
 
@@ -234,6 +234,11 @@ var (
 			"in a cluster will only discoverable within the same cluster unless explicitly exported "+
 			"(via the ServiceExport CR).").Get()
 
+	EnableMCSHost = env.RegisterBoolVar("ENABLE_MCS_HOST", false,
+		"If enabled, istiod will provide an alias <svc>.<namespace>.svc.clusterset.local for "+
+			"each Kubernetes service. Clients must, however, be able to successfully lookup these DNS hosts. "+
+			"That means that either Istio DNS interception must be enabled or an MCS controller must be used.").Get()
+
 	EnableAnalysis = env.RegisterBoolVar(
 		"PILOT_ENABLE_ANALYSIS",
 		false,
@@ -245,6 +250,12 @@ var (
 		"PILOT_ENABLE_STATUS",
 		false,
 		"If enabled, pilot will update the CRD Status field of all istio resources with reconciliation status.",
+	).Get()
+
+	StatusUpdateInterval = env.RegisterDurationVar(
+		"PILOT_STATUS_UPDATE_INTERVAL",
+		500*time.Millisecond,
+		"Interval to update the XDS distribution status.",
 	).Get()
 
 	StatusQPS = env.RegisterFloatVar(
@@ -287,6 +298,9 @@ var (
 	EnableServiceApis = env.RegisterBoolVar("PILOT_ENABLED_SERVICE_APIS", true,
 		"If this is set to true, support for Kubernetes gateway-api (github.com/kubernetes-sigs/gateway-api) will "+
 			" be enabled. In addition to this being enabled, the gateway-api CRDs need to be installed.").Get()
+
+	EnableGatewayAPIStatus = env.RegisterBoolVar("PILOT_ENABLE_GATEWAY_API_STATUS", true,
+		"If this is set to true, gateway-api resources will have status written to them").Get()
 
 	EnableVirtualServiceDelegate = env.RegisterBoolVar(
 		"PILOT_ENABLE_VIRTUAL_SERVICE_DELEGATE",
@@ -343,10 +357,15 @@ var (
 	EnableXDSCaching = env.RegisterBoolVar("PILOT_ENABLE_XDS_CACHE", true,
 		"If true, Pilot will cache XDS responses.").Get()
 
+	// EnableCDSCaching determines if CDS caching is enabled. This is explicitly split out of ENABLE_XDS_CACHE,
+	// so that in case there are issues with the CDS cache we can just disable the CDS cache.
+	EnableCDSCaching = env.RegisterBoolVar("PILOT_ENABLE_CDS_CACHE", true,
+		"If true, Pilot will cache CDS responses. Note: this depends on PILOT_ENABLE_XDS_CACHE.").Get()
+
 	EnableXDSCacheMetrics = env.RegisterBoolVar("PILOT_XDS_CACHE_STATS", false,
 		"If true, Pilot will collect metrics for XDS cache efficiency.").Get()
 
-	XDSCacheMaxSize = env.RegisterIntVar("PILOT_XDS_CACHE_SIZE", 20000,
+	XDSCacheMaxSize = env.RegisterIntVar("PILOT_XDS_CACHE_SIZE", 60000,
 		"The maximum number of cache entries for the XDS cache.").Get()
 
 	// EnableLegacyFSGroupInjection has first-party-jwt as allowed because we only

@@ -29,8 +29,8 @@ import (
 	"istio.io/istio/pilot/pkg/leaderelection"
 	"istio.io/istio/pilot/pkg/model"
 	"istio.io/istio/pilot/pkg/server"
-	"istio.io/istio/pilot/pkg/serviceregistry"
 	"istio.io/istio/pilot/pkg/serviceregistry/aggregate"
+	"istio.io/istio/pilot/pkg/serviceregistry/provider"
 	"istio.io/istio/pilot/pkg/serviceregistry/serviceentry"
 	"istio.io/istio/pkg/cluster"
 	"istio.io/istio/pkg/config/schema/collection"
@@ -247,7 +247,7 @@ func (m *Multicluster) AddMemberCluster(clusterID cluster.ID, rc *secretcontroll
 		if features.InjectionWebhookConfigName != "" && m.caBundleWatcher != nil {
 			// TODO prevent istiods in primary clusters from trying to patch eachother. should we also leader-elect?
 			log.Infof("initializing webhook cert patch for cluster %s", clusterID)
-			patcher, err := webhooks.NewWebhookCertPatcher(client.Kube(), m.revision, webhookName, m.caBundleWatcher.GetCABundle())
+			patcher, err := webhooks.NewWebhookCertPatcher(client.Kube(), m.revision, webhookName, m.caBundleWatcher)
 			if err != nil {
 				log.Errorf("could not initialize webhook cert patcher: %v", err)
 			} else {
@@ -256,8 +256,7 @@ func (m *Multicluster) AddMemberCluster(clusterID cluster.ID, rc *secretcontroll
 		}
 		// Patch validation webhook cert
 		if m.caBundleWatcher != nil {
-			controller.NewValidatingWebhookController(client, m.revision,
-				m.secretNamespace, m.caBundleWatcher).Run(clusterStopCh)
+			go controller.NewValidatingWebhookController(client, m.revision, m.secretNamespace, m.caBundleWatcher).Run(clusterStopCh)
 		}
 	}
 
@@ -306,7 +305,7 @@ func (m *Multicluster) UpdateMemberCluster(clusterID cluster.ID, rc *secretcontr
 func (m *Multicluster) DeleteMemberCluster(clusterID cluster.ID) error {
 	m.m.Lock()
 	defer m.m.Unlock()
-	m.serviceController.DeleteRegistry(clusterID, serviceregistry.Kubernetes)
+	m.serviceController.DeleteRegistry(clusterID, provider.Kubernetes)
 	kc, ok := m.remoteKubeControllers[clusterID]
 	if !ok {
 		log.Infof("cluster %s does not exist, maybe caused by invalid kubeconfig", clusterID)
@@ -316,7 +315,7 @@ func (m *Multicluster) DeleteMemberCluster(clusterID cluster.ID) error {
 		log.Warnf("failed cleaning up services in %s: %v", clusterID, err)
 	}
 	if kc.workloadEntryStore != nil {
-		m.serviceController.DeleteRegistry(clusterID, serviceregistry.External)
+		m.serviceController.DeleteRegistry(clusterID, provider.External)
 	}
 	delete(m.remoteKubeControllers, clusterID)
 	if m.XDSUpdater != nil {
@@ -360,10 +359,11 @@ func (m *Multicluster) GetRemoteKubeClient(clusterID cluster.ID) kubernetes.Inte
 	return nil
 }
 
-func (m *Multicluster) InitSecretController(stop <-chan struct{}) {
+func (m *Multicluster) InitSecretController(stop <-chan struct{}) *secretcontroller.Controller {
 	m.secretController = secretcontroller.StartSecretController(
 		m.client, m.AddMemberCluster, m.UpdateMemberCluster, m.DeleteMemberCluster,
 		m.secretNamespace, m.syncInterval, stop)
+	return m.secretController
 }
 
 func (m *Multicluster) HasSynced() bool {

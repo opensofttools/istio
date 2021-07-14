@@ -34,7 +34,7 @@ import (
 	"istio.io/istio/pkg/config/host"
 	"istio.io/istio/pkg/config/labels"
 	"istio.io/istio/pkg/config/schema/gvk"
-	network2 "istio.io/istio/pkg/network"
+	"istio.io/istio/pkg/network"
 )
 
 // Return the tunnel type for this endpoint builder. If the endpoint builder builds h2tunnel, the final endpoint
@@ -60,8 +60,8 @@ func GetTunnelBuilderType(_ string, proxy *model.Proxy, _ *model.PushContext) ne
 type EndpointBuilder struct {
 	// These fields define the primary key for an endpoint, and can be used as a cache key
 	clusterName     string
-	network         network2.ID
-	networkView     map[network2.ID]bool
+	network         network.ID
+	networkView     map[network.ID]bool
 	clusterID       cluster.ID
 	locality        *core.Locality
 	destinationRule *config.Config
@@ -142,7 +142,7 @@ func (b EndpointBuilder) Key() string {
 		sort.Strings(nv)
 		params = append(params, nv...)
 	}
-	return strings.Join(params, "~")
+	return "eds://" + strings.Join(params, "~")
 }
 
 func (b EndpointBuilder) Cacheable() bool {
@@ -169,7 +169,7 @@ func (b EndpointBuilder) DependentTypes() []config.GroupVersionKind {
 	return edsDependentTypes
 }
 
-func (b *EndpointBuilder) canViewNetwork(network network2.ID) bool {
+func (b *EndpointBuilder) canViewNetwork(network network.ID) bool {
 	if b.networkView == nil {
 		return true
 	}
@@ -213,6 +213,7 @@ func (t *EndpointH2TunnelApplier) ApplyTunnel(lep *endpoint.LbEndpoint, tunnelTy
 }
 
 type LocLbEndpointsAndOptions struct {
+	istioEndpoints []*model.IstioEndpoint
 	// The protobuf message which contains LbEndpoint slice.
 	llbEndpoints endpoint.LocalityLbEndpoints
 	// The runtime information of the LbEndpoint slice. Each LbEndpoint has individual metadata at the same index.
@@ -227,7 +228,8 @@ func MakeTunnelApplier(_ *endpoint.LbEndpoint, tunnelOpt networking.TunnelAbilit
 	return &EndpointNoTunnelApplier{}
 }
 
-func (e *LocLbEndpointsAndOptions) append(le *endpoint.LbEndpoint, tunnelOpt networking.TunnelAbility) {
+func (e *LocLbEndpointsAndOptions) append(ep *model.IstioEndpoint, le *endpoint.LbEndpoint, tunnelOpt networking.TunnelAbility) {
+	e.istioEndpoints = append(e.istioEndpoints, ep)
 	e.llbEndpoints.LbEndpoints = append(e.llbEndpoints.LbEndpoints, le)
 	e.tunnelMetadata = append(e.tunnelMetadata, MakeTunnelApplier(le, tunnelOpt))
 }
@@ -305,18 +307,18 @@ func (b *EndpointBuilder) buildLocalityLbEndpointsFromShards(
 			locLbEps, found := localityEpMap[ep.Locality.Label]
 			if !found {
 				locLbEps = &LocLbEndpointsAndOptions{
-					endpoint.LocalityLbEndpoints{
+					llbEndpoints: endpoint.LocalityLbEndpoints{
 						Locality:    util.ConvertLocality(ep.Locality.Label),
 						LbEndpoints: make([]*endpoint.LbEndpoint, 0, len(endpoints)),
 					},
-					make([]EndpointTunnelApplier, 0, len(endpoints)),
+					tunnelMetadata: make([]EndpointTunnelApplier, 0, len(endpoints)),
 				}
 				localityEpMap[ep.Locality.Label] = locLbEps
 			}
 			if ep.EnvoyEndpoint == nil {
 				ep.EnvoyEndpoint = buildEnvoyLbEndpoint(ep)
 			}
-			locLbEps.append(ep.EnvoyEndpoint, ep.TunnelAbility)
+			locLbEps.append(ep, ep.EnvoyEndpoint, ep.TunnelAbility)
 
 			// detect if mTLS is possible for this endpoint, used later during ep filtering
 			// this must be done while converting IstioEndpoints because we still have workload labels
@@ -385,13 +387,9 @@ func (b *EndpointBuilder) createClusterLoadAssignment(llbOpts []*LocLbEndpointsA
 func buildEnvoyLbEndpoint(e *model.IstioEndpoint) *endpoint.LbEndpoint {
 	addr := util.BuildAddress(e.Address, e.EndpointPort)
 
-	epWeight := e.LbWeight
-	if epWeight == 0 {
-		epWeight = 1
-	}
 	ep := &endpoint.LbEndpoint{
 		LoadBalancingWeight: &wrappers.UInt32Value{
-			Value: epWeight,
+			Value: e.GetLoadBalancingWeight(),
 		},
 		HostIdentifier: &endpoint.LbEndpoint_Endpoint{
 			Endpoint: &endpoint.Endpoint{

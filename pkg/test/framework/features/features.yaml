@@ -19,6 +19,7 @@ features:
   observability:
     telemetry:
       stackdriver:
+      logging:
       stats:
         prometheus:
           customize-metric:
@@ -51,6 +52,8 @@ features:
     mcs:
       autoexport:
       servicediscovery:
+    cni:
+      race-condition-repair:
   usability:
     observability:
       describe:

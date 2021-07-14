@@ -46,7 +46,7 @@ import (
 	"istio.io/istio/pilot/cmd/pilot-agent/status/grpcready"
 	"istio.io/istio/pilot/cmd/pilot-agent/status/ready"
 	"istio.io/istio/pilot/pkg/model"
-	nds "istio.io/istio/pilot/pkg/proto"
+	dnsProto "istio.io/istio/pkg/dns/proto"
 	"istio.io/istio/pkg/kube/apimirror"
 	"istio.io/pkg/env"
 	"istio.io/pkg/log"
@@ -110,7 +110,7 @@ type Options struct {
 	Probes              []ready.Prober
 	EnvoyPrometheusPort int
 	Context             context.Context
-	FetchDNS            func() *nds.NameTable
+	FetchDNS            func() *dnsProto.NameTable
 	NoEnvoy             bool
 	GRPCBootstrap       string
 }
@@ -126,7 +126,7 @@ type Server struct {
 	statusPort            uint16
 	lastProbeSuccessful   bool
 	envoyStatsPort        int
-	fetchDNS              func() *nds.NameTable
+	fetchDNS              func() *dnsProto.NameTable
 }
 
 func init() {
@@ -212,7 +212,7 @@ func NewServer(config Options) (*Server, error) {
 	// Validate the map key matching the regex pattern.
 	for path, prober := range s.appKubeProbers {
 		if !appProberPattern.Match([]byte(path)) {
-			return nil, fmt.Errorf(`invalid key, must be in form of regex pattern ^/app-health/[^\/]+/(livez|readyz)$`)
+			return nil, fmt.Errorf(`invalid key, must be in form of regex pattern %v`, appProberPattern)
 		}
 		if prober.HTTPGet == nil {
 			return nil, fmt.Errorf(`invalid prober type, must be of type httpGet`)
@@ -500,10 +500,10 @@ func (s *Server) scrape(url string, header http.Header) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error scraping %s: %v", url, err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("error scraping %s, status code: %v", url, resp.StatusCode)
 	}
-	defer resp.Body.Close()
 	metrics, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading %s: %v", url, err)
@@ -540,8 +540,6 @@ func (s *Server) handleAppProbe(w http.ResponseWriter, req *http.Request) {
 		_, _ = w.Write([]byte(fmt.Sprintf("app prober config does not exists for %v", path)))
 		return
 	}
-	// get the http client must exist because
-	httpClient := s.appProbeClient[path]
 
 	proberPath := prober.HTTPGet.Path
 	if !strings.HasPrefix(proberPath, "/") {
@@ -582,6 +580,9 @@ func (s *Server) handleAppProbe(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 	}
+
+	// get the http client must exist because
+	httpClient := s.appProbeClient[path]
 
 	// Send the request.
 	response, err := httpClient.Do(appReq)

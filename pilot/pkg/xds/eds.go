@@ -51,7 +51,7 @@ func (s *DiscoveryServer) UpdateServiceShards(push *model.PushContext) error {
 	for _, svc := range push.Services(nil) {
 		for _, registry := range registries {
 			// skip the service in case this svc does not belong to the registry.
-			if svc.Attributes.ServiceRegistry != string(registry.Provider()) {
+			if svc.Attributes.ServiceRegistry != registry.Provider() {
 				continue
 			}
 			endpoints := make([]*model.IstioEndpoint, 0)
@@ -315,11 +315,9 @@ func (s *DiscoveryServer) generateEndpoints(b EndpointBuilder) *endpoint.Cluster
 		return buildEmptyClusterLoadAssignment(b.clusterName)
 	}
 
-	// If networks are set (by default they aren't) apply the Split Horizon
-	// EDS filter on the endpoints
-	if b.push.NetworkManager().IsMultiNetworkEnabled() {
-		llbOpts = b.EndpointsByNetworkFilter(llbOpts)
-	}
+	// Apply the Split Horizon EDS filter, if applicable.
+	llbOpts = b.EndpointsByNetworkFilter(llbOpts)
+
 	if model.IsDNSSrvSubsetKey(b.clusterName) {
 		// For the SNI-DNAT clusters, we are using AUTO_PASSTHROUGH gateway. AUTO_PASSTHROUGH is intended
 		// to passthrough mTLS requests. However, at the gateway we do not actually have any way to tell if the

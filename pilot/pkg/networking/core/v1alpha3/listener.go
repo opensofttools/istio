@@ -38,7 +38,7 @@ import (
 	istionetworking "istio.io/istio/pilot/pkg/networking"
 	"istio.io/istio/pilot/pkg/networking/plugin"
 	"istio.io/istio/pilot/pkg/networking/util"
-	"istio.io/istio/pilot/pkg/serviceregistry"
+	"istio.io/istio/pilot/pkg/serviceregistry/provider"
 	xdsfilters "istio.io/istio/pilot/pkg/xds/filters"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/constants"
@@ -582,7 +582,7 @@ func (configgen *ConfigGeneratorImpl) buildSidecarOutboundListeners(node *model.
 					if features.EnableHeadlessService && bind == "" && service.Resolution == model.Passthrough &&
 						saddress == constants.UnspecifiedIP && (servicePort.Protocol.IsTCP() || servicePort.Protocol.IsUnsupported()) {
 						instances := push.ServiceInstancesByPort(service, servicePort.Port, nil)
-						if service.Attributes.ServiceRegistry != string(serviceregistry.Kubernetes) && len(instances) == 0 && service.Attributes.LabelSelectors == nil {
+						if service.Attributes.ServiceRegistry != provider.Kubernetes && len(instances) == 0 && service.Attributes.LabelSelectors == nil {
 							// A Kubernetes service with no endpoints means there are no endpoints at
 							// all, so don't bother sending, as traffic will never work. If we did
 							// send a wildcard listener, we may get into a situation where a scale
@@ -1224,24 +1224,6 @@ type buildListenerOpts struct {
 
 func buildHTTPConnectionManager(listenerOpts buildListenerOpts, httpOpts *httpListenerOpts,
 	httpFilters []*hcm.HttpFilter) *hcm.HttpConnectionManager {
-	filters := make([]*hcm.HttpFilter, len(httpFilters))
-	copy(filters, httpFilters)
-
-	if httpOpts.addGRPCWebFilter {
-		filters = append(filters, xdsfilters.GrpcWeb)
-	}
-
-	if listenerOpts.port != nil && listenerOpts.port.Protocol.IsGRPC() {
-		filters = append(filters, xdsfilters.GrpcStats)
-	}
-
-	// append ALPN HTTP filter in HTTP connection manager for outbound listener only.
-	if listenerOpts.class == ListenerClassSidecarOutbound {
-		filters = append(filters, xdsfilters.Alpn)
-	}
-
-	filters = append(filters, xdsfilters.Cors, xdsfilters.Fault, xdsfilters.Router)
-
 	if httpOpts.connectionManager == nil {
 		httpOpts.connectionManager = &hcm.HttpConnectionManager{}
 	}
@@ -1249,7 +1231,6 @@ func buildHTTPConnectionManager(listenerOpts buildListenerOpts, httpOpts *httpLi
 	connectionManager := httpOpts.connectionManager
 	connectionManager.CodecType = hcm.HttpConnectionManager_AUTO
 	connectionManager.AccessLog = []*accesslog.AccessLog{}
-	connectionManager.HttpFilters = filters
 	connectionManager.StatPrefix = httpOpts.statPrefix
 	connectionManager.DelayedCloseTimeout = features.DelayedCloseTimeout
 
@@ -1307,9 +1288,29 @@ func buildHTTPConnectionManager(listenerOpts buildListenerOpts, httpOpts *httpLi
 		connectionManager.RouteSpecifier = &hcm.HttpConnectionManager_RouteConfig{RouteConfig: httpOpts.routeConfig}
 	}
 
-	accessLogBuilder.setHTTPAccessLog(listenerOpts.push.Mesh, connectionManager)
+	accessLogBuilder.setHTTPAccessLog(listenerOpts, connectionManager)
 
-	configureTracing(listenerOpts, connectionManager)
+	routerFilterCtx := configureTracing(listenerOpts, connectionManager)
+
+	filters := make([]*hcm.HttpFilter, len(httpFilters))
+	copy(filters, httpFilters)
+
+	if httpOpts.addGRPCWebFilter {
+		filters = append(filters, xdsfilters.GrpcWeb)
+	}
+
+	if listenerOpts.port != nil && listenerOpts.port.Protocol.IsGRPC() {
+		filters = append(filters, xdsfilters.GrpcStats)
+	}
+
+	// append ALPN HTTP filter in HTTP connection manager for outbound listener only.
+	if listenerOpts.class == ListenerClassSidecarOutbound {
+		filters = append(filters, xdsfilters.Alpn)
+	}
+
+	filters = append(filters, xdsfilters.Cors, xdsfilters.Fault, xdsfilters.BuildRouterFilter(routerFilterCtx))
+
+	connectionManager.HttpFilters = filters
 
 	return connectionManager
 }
@@ -1423,7 +1424,7 @@ func buildListener(opts buildListenerOpts, trafficDirection core.TrafficDirectio
 		DeprecatedV1:     deprecatedV1,
 	}
 
-	accessLogBuilder.setListenerAccessLog(opts.push.Mesh, listener)
+	accessLogBuilder.setListenerAccessLog(opts.push, opts.proxy, listener)
 
 	if opts.proxy.Type != model.Router {
 		listener.ListenerFiltersTimeout = gogo.DurationToProtoDuration(opts.push.Mesh.ProtocolDetectionTimeout)
@@ -1618,6 +1619,9 @@ func filterChainMatchEqual(first *listener.FilterChainMatch, second *listener.Fi
 		return false
 	}
 	if !util.CidrRangeSliceEqual(first.SourcePrefixRanges, second.SourcePrefixRanges) {
+		return false
+	}
+	if !util.CidrRangeSliceEqual(first.DirectSourcePrefixRanges, second.DirectSourcePrefixRanges) {
 		return false
 	}
 	if first.AddressSuffix != second.AddressSuffix {

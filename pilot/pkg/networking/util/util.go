@@ -42,7 +42,7 @@ import (
 	networking "istio.io/api/networking/v1alpha3"
 	"istio.io/istio/pilot/pkg/features"
 	"istio.io/istio/pilot/pkg/model"
-	"istio.io/istio/pilot/pkg/serviceregistry"
+	"istio.io/istio/pilot/pkg/serviceregistry/provider"
 	"istio.io/istio/pkg/cluster"
 	"istio.io/istio/pkg/config"
 	"istio.io/istio/pkg/config/labels"
@@ -480,18 +480,14 @@ func MergeAnyWithAny(dst *any.Any, src *any.Any) (*any.Any, error) {
 }
 
 // BuildLbEndpointMetadata adds metadata values to a lb endpoint
-func BuildLbEndpointMetadata(network network.ID, tlsMode, workloadname, namespace string,
+func BuildLbEndpointMetadata(networkID network.ID, tlsMode, workloadname, namespace string,
 	clusterID cluster.ID, labels labels.Instance) *core.Metadata {
-	if network == "" && (tlsMode == "" || tlsMode == model.DisabledTLSModeLabel) && !features.EndpointTelemetryLabel {
+	if networkID == "" && (tlsMode == "" || tlsMode == model.DisabledTLSModeLabel) && !features.EndpointTelemetryLabel {
 		return nil
 	}
 
 	metadata := &core.Metadata{
 		FilterMetadata: map[string]*pstruct.Struct{},
-	}
-
-	if network != "" {
-		addIstioEndpointLabel(metadata, "network", &pstruct.Value{Kind: &pstruct.Value_StringValue{StringValue: network.String()}})
 	}
 
 	if tlsMode != "" && tlsMode != model.DisabledTLSModeLabel {
@@ -558,7 +554,7 @@ func BuildStatPrefix(statPattern string, host string, subset string, port *model
 // shortHostName constructs the name from kubernetes hosts based on attributes (name and namespace).
 // For other hosts like VMs, this method does not do any thing - just returns the passed in host as is.
 func shortHostName(host string, attributes model.ServiceAttributes) string {
-	if attributes.ServiceRegistry == string(serviceregistry.Kubernetes) {
+	if attributes.ServiceRegistry == provider.Kubernetes {
 		return attributes.Name + "." + attributes.Namespace
 	}
 	return host

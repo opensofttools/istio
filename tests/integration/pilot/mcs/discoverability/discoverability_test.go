@@ -140,7 +140,8 @@ func enableMCSServiceDiscovery(_ resource.Context, cfg *istio.Config) {
 values:
   pilot:
     env:
-      ENABLE_MCS_SERVICE_DISCOVERY: "true"`
+      ENABLE_MCS_SERVICE_DISCOVERY: "true"
+      ENABLE_MCS_HOST: "true"`
 }
 
 func deployEchos(t resource.Context) error {
@@ -154,13 +155,9 @@ func deployEchos(t resource.Context) error {
 	}
 	testNS = ns.Name()
 
-	// TODO(https://github.com/istio/istio/issues/33526)
-	// To avoid a multi-network bug with MCS, we'll only deploy our workloads on the same network
-	clusters := findClustersOnTheSameNetwork(t)
-
 	// Create echo instances in each cluster.
 	echos, err = echoboot.NewBuilder(t).
-		WithClusters(clusters...).
+		WithClusters(t.Clusters()...).
 		WithConfig(echo.Config{
 			Service:   serviceA,
 			Namespace: ns,
@@ -172,18 +169,6 @@ func deployEchos(t resource.Context) error {
 			Ports:     common.EchoPorts,
 		}).Build()
 	return err
-}
-
-func findClustersOnTheSameNetwork(t resource.Context) cluster.Clusters {
-	networkMap := t.Clusters().ByNetwork()
-	var out cluster.Clusters
-	// Pick the network with the most clusters.
-	for _, clusters := range networkMap {
-		if len(clusters) > len(out) {
-			out = clusters
-		}
-	}
-	return out
 }
 
 func sendTrafficBetweenAllClusters(
@@ -212,7 +197,14 @@ func newServiceExport(service string) *v1alpha1.ServiceExport {
 
 func checkClustersReached(t framework.TestContext, src, dest echo.Instance, clusters cluster.Clusters) {
 	t.Helper()
+
+	// Call the service using the MCS clusterset host.
+	address := fmt.Sprintf("%s.%s.svc.clusterset.local",
+		dest.Config().Service,
+		dest.Config().Namespace.Name())
+
 	src.CallWithRetryOrFail(t, echo.CallOptions{
+		Address:   address,
 		Target:    dest,
 		Count:     50,
 		PortName:  "http",
